@@ -1,10 +1,6 @@
 # Dependencies
 node_modules/
 
-# Build outputs
-dist/
-build/
-
 # Environment variables
 .env
 .env.local
@@ -27,8 +23,8 @@ pids
 # Coverage directory
 coverage/
 
-# Vite cache
-.vite/
+# nyc test coverage
+.nyc_output
 
 # Optional npm cache directory
 .npm

@@ -1,0 +1,174 @@
+const express = require('express');
+const Joi = require('joi');
+const Student = require('../models/Student');
+const Class = require('../models/Class');
+const ClassFeeStructure = require('../models/ClassFeeStructure');
+const StudentFeeCustom = require('../models/StudentFeeCustom');
+const { authenticateToken, authorize } = require('../middleware/auth');
+
+const router = express.Router();
+
+// Validation schemas
+const studentSchema = Joi.object({
+  admissionNo: Joi.string().required(),
+  name: Joi.string().required(),
+  dob: Joi.date().optional(),
+  gender: Joi.string().valid('M', 'F').optional(),
+  admissionDate: Joi.date().optional(),
+  classId: Joi.string().required(),
+  guardianName: Joi.string().optional(),
+  guardianContact: Joi.string().optional(),
+  address: Joi.string().optional(),
+  status: Joi.string().valid('active', 'inactive', 'passed', 'left').optional()
+});
+
+// Get all students with pagination and filtering
+router.get('/', authenticateToken, authorize(['students:read']), async (req, res) => {
+  try {
+    const { page = 1, limit = 10, search, classId, status } = req.query;
+    const skip = (page - 1) * limit;
+
+    const filter = {};
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { admissionNo: { $regex: search, $options: 'i' } },
+        { guardianName: { $regex: search, $options: 'i' } }
+      ];
+    }
+    if (classId) filter.classId = classId;
+    if (status) filter.status = status;
+
+    const [students, total] = await Promise.all([
+      Student.find(filter)
+        .populate('classId')
+        .skip(parseInt(skip))
+        .limit(parseInt(limit))
+        .sort({ createdAt: -1 }),
+      Student.countDocuments(filter)
+    ]);
+
+    res.json({
+      students: students.map(student => ({
+        ...student.toObject(),
+        studentId: student._id,
+        class: student.classId ? { ...student.classId.toObject(), classId: student.classId._id } : null
+      })),
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Get students error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get student by ID
+router.get('/:id', authenticateToken, authorize(['students:read']), async (req, res) => {
+  try {
+    const student = await Student.findById(req.params.id).populate('classId');
+
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    res.json({
+      ...student.toObject(),
+      studentId: student._id,
+      class: student.classId ? { ...student.classId.toObject(), classId: student.classId._id } : null
+    });
+  } catch (error) {
+    console.error('Get student error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Create new student
+router.post('/', authenticateToken, authorize(['students:create']), async (req, res) => {
+  try {
+    const { error } = studentSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ error: error.details[0].message });
+    }
+
+    const student = await Student.create(req.body);
+    await student.populate('classId');
+
+    // Create default fee structure for the student
+    const classFeeStructure = await ClassFeeStructure.find({ classId: student.classId, active: true });
+
+    for (const fee of classFeeStructure) {
+      await StudentFeeCustom.create({
+        studentId: student._id,
+        feeTypeId: fee.feeTypeId,
+        isApplicable: true
+      });
+    }
+
+    res.status(201).json({
+      ...student.toObject(),
+      studentId: student._id,
+      class: student.classId ? { ...student.classId.toObject(), classId: student.classId._id } : null
+    });
+  } catch (error) {
+    console.error('Create student error:', error);
+    if (error.code === 11000) {
+      return res.status(400).json({ error: 'Admission number already exists' });
+    }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update student fee structure
+router.put('/:id/fee-structure', authenticateToken, authorize(['students:update']), async (req, res) => {
+  try {
+    const studentId = req.params.id;
+    const { customizations } = req.body;
+
+    for (const fee of customizations) {
+      await StudentFeeCustom.findOneAndUpdate(
+        { studentId, feeTypeId: fee.feeTypeId },
+        {
+          customAmount: fee.customAmount,
+          isApplicable: fee.isApplicable,
+          remarks: fee.remarks
+        },
+        { upsert: true, new: true }
+      );
+    }
+
+    res.json({ message: 'Fee structure updated successfully' });
+  } catch (error) {
+    console.error('Update fee structure error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get student fee structure
+router.get('/:id/fee-structure', authenticateToken, authorize(['students:read']), async (req, res) => {
+  try {
+    const studentId = req.params.id;
+    
+    const student = await Student.findById(studentId).populate('classId');
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    const studentFeeCustom = await StudentFeeCustom.find({ studentId }).populate('feeTypeId');
+
+    res.json(studentFeeCustom.map(custom => ({
+      ...custom.toObject(),
+      feeTypeId: custom.feeTypeId._id,
+      feeType: { ...custom.feeTypeId.toObject(), feeTypeId: custom.feeTypeId._id }
+    })));
+  } catch (error) {
+    console.error('Get fee structure error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+module.exports = router;
