@@ -108,4 +108,14 @@ export const feesAPI = {
   getDueSummary: () => api.get('/fees/due-summary'),
 };
 
+// Finance API
+export const financeAPI = {
+  getAccounts: () => api.get('/finance/accounts'),
+  createAccount: (data) => api.post('/finance/accounts', data),
+  deleteAccount: (id) => api.delete(`/finance/accounts/${id}`),
+  getTransactions: (params) => api.get('/finance/transactions', { params }),
+  createTransaction: (data) => api.post('/finance/transactions', data),
+  getSummary: () => api.get('/finance/summary'),
+};
+
 export default api;

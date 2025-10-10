@@ -6,6 +6,7 @@ import {
   School,
   UserCheck,
   IndianRupee,
+  Wallet,
 } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
 import { NavMain } from "@/components/nav-main"
@@ -58,6 +59,12 @@ export function AppSidebar({ ...props }) {
       icon: IndianRupee,
       isActive: window.location.pathname === '/fees',
     }] : []),
+    {
+      title: "Finance",
+      url: "/finance",
+      icon: Wallet,
+      isActive: window.location.pathname === '/finance',
+    },
   ];
 
   return (

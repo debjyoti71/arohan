@@ -9,10 +9,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { classesAPI } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
-import { Plus, Users, Trash2 } from 'lucide-react';
+import { Plus, Users, Trash2, Edit, MoreVertical } from 'lucide-react';
 
 export default function Classes() {
   const { hasPermission } = useAuth();
@@ -24,6 +25,8 @@ export default function Classes() {
     className: '',
     classTeacherId: ''
   });
+  const [editingClass, setEditingClass] = useState(null);
+  const [showEditDialog, setShowEditDialog] = useState(false);
 
   useEffect(() => {
     fetchClasses();
@@ -80,6 +83,24 @@ export default function Classes() {
         console.error('Error deleting class:', error);
         alert(error.response?.data?.error || 'Error deleting class');
       }
+    }
+  };
+
+  const handleEditClass = async (e) => {
+    e.preventDefault();
+    try {
+      await classesAPI.update(editingClass.classId, {
+        className: editingClass.className,
+        classTeacherId: editingClass.classTeacherId || null
+      });
+      
+      setShowEditDialog(false);
+      setEditingClass(null);
+      fetchClasses();
+      fetchTeachers();
+    } catch (error) {
+      console.error('Error updating class:', error);
+      alert(error.response?.data?.error || 'Error updating class');
     }
   };
 
@@ -166,6 +187,51 @@ export default function Classes() {
             )}
           </div>
 
+          {/* Edit Class Dialog */}
+          <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit Class</DialogTitle>
+                <DialogDescription>Update class details and teacher assignment.</DialogDescription>
+              </DialogHeader>
+              {editingClass && (
+                <form onSubmit={handleEditClass} className="space-y-4">
+                  <div>
+                    <Label htmlFor="edit-className">Class Name</Label>
+                    <Input
+                      id="edit-className"
+                      value={editingClass.className}
+                      onChange={(e) => setEditingClass(prev => ({ ...prev, className: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="edit-classTeacherId">Class Teacher</Label>
+                    <select
+                      id="edit-classTeacherId"
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={editingClass.classTeacherId}
+                      onChange={(e) => setEditingClass(prev => ({ ...prev, classTeacherId: e.target.value }))}
+                    >
+                      <option value="">Select Teacher</option>
+                      {teachers.map(teacher => (
+                        <option key={teacher.staffId} value={teacher.staffId}>
+                          {teacher.name} ({teacher.role})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <DialogFooter>
+                    <Button type="button" variant="outline" onClick={() => setShowEditDialog(false)}>
+                      Cancel
+                    </Button>
+                    <Button type="submit">Update Class</Button>
+                  </DialogFooter>
+                </form>
+              )}
+            </DialogContent>
+          </Dialog>
+
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {loading ? (
               <div className="col-span-full text-center py-8">Loading classes...</div>
@@ -174,15 +240,34 @@ export default function Classes() {
                 <Card key={cls.classId}>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-lg font-semibold">{cls.className}</CardTitle>
-                    {hasPermission('classes', 'delete') && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteClass(cls.classId)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        {hasPermission('classes', 'update') && (
+                          <DropdownMenuItem onClick={() => {
+                            setEditingClass({
+                              classId: cls.classId,
+                              className: cls.className,
+                              classTeacherId: cls.classTeacher?.staffId || ''
+                            });
+                            setShowEditDialog(true);
+                          }}>
+                            <Edit className="mr-2 h-4 w-4" />
+                            Edit
+                          </DropdownMenuItem>
+                        )}
+                        {hasPermission('classes', 'delete') && (
+                          <DropdownMenuItem onClick={() => handleDeleteClass(cls.classId)}>
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">

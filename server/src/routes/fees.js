@@ -13,7 +13,7 @@ const router = express.Router();
 // Validation schemas
 const feeTypeSchema = Joi.object({
   name: Joi.string().required(),
-  frequency: Joi.string().valid('monthly', 'quarterly', 'yearly', 'one_time').required(),
+  frequency: Joi.string().valid('monthly', 'quarterly', 'biannual', 'yearly', 'one_time').required(),
   defaultAmount: Joi.number().positive().required(),
   description: Joi.string().allow('').optional()
 });

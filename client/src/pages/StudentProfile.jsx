@@ -9,8 +9,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { studentsAPI, feesAPI } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
-import { ArrowLeft, User, IndianRupee, Settings } from 'lucide-react';
+import { ArrowLeft, User, IndianRupee, Settings, Edit, Trash2, MoreVertical } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -25,6 +26,8 @@ export default function StudentProfile() {
   const [loading, setLoading] = useState(true);
   const [showFeeDialog, setShowFeeDialog] = useState(false);
   const [feeCustomizations, setFeeCustomizations] = useState({});
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editingStudent, setEditingStudent] = useState(null);
 
   useEffect(() => {
     fetchStudentData();
@@ -43,7 +46,7 @@ export default function StudentProfile() {
   const handleSaveFeeStructure = async () => {
     try {
       const customizations = Object.entries(feeCustomizations).map(([feeTypeId, data]) => ({
-        feeTypeId: parseInt(feeTypeId),
+        feeTypeId: feeTypeId,
         ...data,
         customAmount: parseFloat(data.customAmount)
       }));
@@ -57,24 +60,45 @@ export default function StudentProfile() {
     }
   };
 
+  const handleEditStudent = async (e) => {
+    e.preventDefault();
+    try {
+      const { _id, studentId, class: cls, createdAt, updatedAt, __v, ...updateData } = editingStudent;
+      await studentsAPI.update(id, updateData);
+      setShowEditDialog(false);
+      fetchStudentData();
+    } catch (error) {
+      console.error('Error updating student:', error);
+      alert(error.response?.data?.error || 'Error updating student');
+    }
+  };
+
   const fetchStudentData = async () => {
     try {
       const studentRes = await studentsAPI.getById(id);
+      console.log('Student data:', studentRes.data);
       setStudent(studentRes.data);
       
-      if (studentRes.data.classId) {
+      const classId = studentRes.data.class?.classId || studentRes.data.classId;
+      console.log('Using classId:', classId);
+      
+      if (classId) {
         const [classFeeRes, studentFeeRes] = await Promise.all([
-          feesAPI.getClassStructure(studentRes.data.classId),
+          feesAPI.getClassStructure(String(classId)),
           studentsAPI.getFeeStructure(id)
         ]);
+        console.log('Class fee structure:', classFeeRes.data);
+        console.log('Student fee custom:', studentFeeRes.data);
+        
         setClassFeeStructure(classFeeRes.data);
         setStudentFeeCustom(studentFeeRes.data);
         
         // Initialize fee customizations
         const customizations = {};
         classFeeRes.data.forEach(fee => {
-          const custom = studentFeeRes.data.find(c => c.feeTypeId === fee.feeTypeId);
-          customizations[fee.feeTypeId] = {
+          const feeTypeId = fee.feeType?.feeTypeId || fee.feeTypeId;
+          const custom = studentFeeRes.data.find(c => c.feeTypeId === feeTypeId);
+          customizations[feeTypeId] = {
             isApplicable: custom?.isApplicable ?? true,
             customAmount: custom?.customAmount ?? fee.amount,
             remarks: custom?.remarks ?? ''
@@ -143,17 +167,56 @@ export default function StudentProfile() {
         </header>
 
         <div className="flex flex-1 flex-col gap-6 p-6">
-          <div className="flex items-center gap-4">
-            <Button asChild variant="outline" size="sm">
-              <Link to="/students">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to Students
-              </Link>
-            </Button>
-            <div>
-              <h1 className="text-3xl font-bold">{student.name}</h1>
-              <p className="text-muted-foreground">Admission No: {student.admissionNo}</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Button asChild variant="outline" size="sm">
+                <Link to="/students">
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back to Students
+                </Link>
+              </Button>
+              <div>
+                <h1 className="text-3xl font-bold">{student.name}</h1>
+                <p className="text-muted-foreground">Admission No: {student.admissionNo}</p>
+              </div>
             </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                {hasPermission('students', 'update') && (
+                  <DropdownMenuItem onClick={() => {
+                    setEditingStudent({
+                      ...student,
+                      classId: student.class?.classId || student.classId,
+                      dateOfBirth: student.dateOfBirth ? new Date(student.dateOfBirth).toISOString().split('T')[0] : '',
+                      dateOfAdmission: student.dateOfAdmission ? new Date(student.dateOfAdmission).toISOString().split('T')[0] : ''
+                    });
+                    setShowEditDialog(true);
+                  }}>
+                    <Edit className="mr-2 h-4 w-4" />
+                    Edit Student
+                  </DropdownMenuItem>
+                )}
+                {hasPermission('students', 'delete') && (
+                  <DropdownMenuItem onClick={() => {
+                    if (confirm('Are you sure you want to delete this student?')) {
+                      studentsAPI.delete(id).then(() => {
+                        window.location.href = '/students';
+                      }).catch(error => {
+                        alert(error.response?.data?.error || 'Error deleting student');
+                      });
+                    }
+                  }}>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete Student
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
           <div className="grid gap-6 md:grid-cols-2">
@@ -220,35 +283,39 @@ export default function StudentProfile() {
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {classFeeStructure.map((fee) => (
-                                <TableRow key={fee.feeTypeId}>
-                                  <TableCell className="font-medium">{fee.feeType.name}</TableCell>
-                                  <TableCell>₹{fee.amount.toLocaleString()}</TableCell>
-                                  <TableCell>
-                                    <Input
-                                      type="number"
-                                      value={feeCustomizations[fee.feeTypeId]?.customAmount || fee.amount}
-                                      onChange={(e) => handleFeeCustomizationChange(fee.feeTypeId, 'customAmount', e.target.value)}
-                                      disabled={!feeCustomizations[fee.feeTypeId]?.isApplicable}
-                                      className="w-24"
-                                    />
-                                  </TableCell>
-                                  <TableCell>
-                                    <Checkbox
-                                      checked={feeCustomizations[fee.feeTypeId]?.isApplicable ?? true}
-                                      onCheckedChange={(checked) => handleFeeCustomizationChange(fee.feeTypeId, 'isApplicable', checked)}
-                                    />
-                                  </TableCell>
-                                  <TableCell>
-                                    <Input
-                                      value={feeCustomizations[fee.feeTypeId]?.remarks || ''}
-                                      onChange={(e) => handleFeeCustomizationChange(fee.feeTypeId, 'remarks', e.target.value)}
-                                      placeholder="Optional remarks"
-                                      className="w-32"
-                                    />
-                                  </TableCell>
-                                </TableRow>
-                              ))}
+                              {classFeeStructure.map((fee) => {
+                                const feeTypeId = fee.feeType?.feeTypeId || fee.feeTypeId;
+                                const feeName = fee.feeType?.name || fee.name;
+                                return (
+                                  <TableRow key={feeTypeId}>
+                                    <TableCell className="font-medium">{feeName}</TableCell>
+                                    <TableCell>₹{fee.amount.toLocaleString()}</TableCell>
+                                    <TableCell>
+                                      <Input
+                                        type="number"
+                                        value={feeCustomizations[feeTypeId]?.customAmount || fee.amount}
+                                        onChange={(e) => handleFeeCustomizationChange(feeTypeId, 'customAmount', e.target.value)}
+                                        disabled={!feeCustomizations[feeTypeId]?.isApplicable}
+                                        className="w-24"
+                                      />
+                                    </TableCell>
+                                    <TableCell>
+                                      <Checkbox
+                                        checked={feeCustomizations[feeTypeId]?.isApplicable ?? true}
+                                        onCheckedChange={(checked) => handleFeeCustomizationChange(feeTypeId, 'isApplicable', checked)}
+                                      />
+                                    </TableCell>
+                                    <TableCell>
+                                      <Input
+                                        value={feeCustomizations[feeTypeId]?.remarks || ''}
+                                        onChange={(e) => handleFeeCustomizationChange(feeTypeId, 'remarks', e.target.value)}
+                                        placeholder="Optional remarks"
+                                        className="w-32"
+                                      />
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
                             </TableBody>
                           </Table>
                         </div>
@@ -267,15 +334,18 @@ export default function StudentProfile() {
                 {classFeeStructure.length > 0 ? (
                   <div className="space-y-3">
                     {classFeeStructure.map((fee) => {
-                      const custom = studentFeeCustom.find(c => c.feeTypeId === fee.feeTypeId);
+                      const feeTypeId = fee.feeType?.feeTypeId || fee.feeTypeId;
+                      const feeName = fee.feeType?.name || fee.name;
+                      const feeFrequency = fee.feeType?.frequency || fee.frequency;
+                      const custom = studentFeeCustom.find(c => c.feeTypeId === feeTypeId);
                       const isApplicable = custom?.isApplicable ?? true;
                       const amount = custom?.customAmount ?? fee.amount;
                       
                       return (
-                        <div key={fee.feeTypeId} className={`flex justify-between items-center p-2 rounded ${!isApplicable ? 'opacity-50' : ''}`}>
+                        <div key={feeTypeId} className={`flex justify-between items-center p-2 rounded ${!isApplicable ? 'opacity-50' : ''}`}>
                           <div>
-                            <p className="font-medium">{fee.feeType.name}</p>
-                            <p className="text-sm text-muted-foreground">{fee.feeType.frequency.replace('_', ' ')}</p>
+                            <p className="font-medium">{feeName}</p>
+                            <p className="text-sm text-muted-foreground">{feeFrequency?.replace('_', ' ')}</p>
                           </div>
                           <div className="text-right">
                             <p className="font-semibold">₹{amount.toLocaleString()}</p>
@@ -291,6 +361,93 @@ export default function StudentProfile() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Edit Student Dialog */}
+          <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Edit Student</DialogTitle>
+                <DialogDescription>Update student information.</DialogDescription>
+              </DialogHeader>
+              {editingStudent && (
+                <form onSubmit={handleEditStudent} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="edit-name">Student Name</Label>
+                      <Input
+                        id="edit-name"
+                        value={editingStudent.name}
+                        onChange={(e) => setEditingStudent(prev => ({ ...prev, name: e.target.value }))}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="edit-admissionNo">Admission Number</Label>
+                      <Input
+                        id="edit-admissionNo"
+                        value={editingStudent.admissionNo}
+                        onChange={(e) => setEditingStudent(prev => ({ ...prev, admissionNo: e.target.value }))}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="edit-dateOfBirth">Date of Birth</Label>
+                      <Input
+                        id="edit-dateOfBirth"
+                        type="date"
+                        value={editingStudent.dateOfBirth}
+                        onChange={(e) => setEditingStudent(prev => ({ ...prev, dateOfBirth: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="edit-gender">Gender</Label>
+                      <select
+                        id="edit-gender"
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={editingStudent.gender || ''}
+                        onChange={(e) => setEditingStudent(prev => ({ ...prev, gender: e.target.value }))}
+                      >
+                        <option value="">Select Gender</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    <div>
+                      <Label htmlFor="edit-guardianName">Guardian Name</Label>
+                      <Input
+                        id="edit-guardianName"
+                        value={editingStudent.guardianName || ''}
+                        onChange={(e) => setEditingStudent(prev => ({ ...prev, guardianName: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="edit-guardianContact">Guardian Contact</Label>
+                      <Input
+                        id="edit-guardianContact"
+                        value={editingStudent.guardianContact || ''}
+                        onChange={(e) => setEditingStudent(prev => ({ ...prev, guardianContact: e.target.value }))}
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Label htmlFor="edit-address">Address</Label>
+                      <Input
+                        id="edit-address"
+                        value={editingStudent.address || ''}
+                        onChange={(e) => setEditingStudent(prev => ({ ...prev, address: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button type="button" variant="outline" onClick={() => setShowEditDialog(false)}>
+                      Cancel
+                    </Button>
+                    <Button type="submit">Update Student</Button>
+                  </DialogFooter>
+                </form>
+              )}
+            </DialogContent>
+          </Dialog>
         </div>
       </SidebarInset>
     </SidebarProvider>

@@ -8,6 +8,7 @@ import Staff from './pages/Staff';
 import Classes from './pages/Classes';
 import Users from './pages/Users';
 import Fees from './pages/Fees';
+import Finance from './pages/Finance';
 import StudentProfile from './pages/StudentProfile';
 
 const ProtectedRoute = ({ children }) => {
@@ -93,6 +94,14 @@ function App() {
       element: (
         <ProtectedRoute>
           <Fees />
+        </ProtectedRoute>
+      ) 
+    },
+    { 
+      path: "/finance", 
+      element: (
+        <ProtectedRoute>
+          <Finance />
         </ProtectedRoute>
       ) 
     },

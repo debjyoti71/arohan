@@ -12,12 +12,16 @@ const router = express.Router();
 const studentSchema = Joi.object({
   admissionNo: Joi.string().required(),
   name: Joi.string().required(),
-  dob: Joi.date().optional(),
-  gender: Joi.string().valid('M', 'F').optional(),
-  admissionDate: Joi.date().optional(),
+  dateOfBirth: Joi.date().optional(),
+  gender: Joi.string().valid('Male', 'Female', 'Other').optional(),
+  bloodGroup: Joi.string().valid('A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-').allow('').optional(),
+  dateOfAdmission: Joi.date().optional(),
+  email: Joi.string().email().allow('').optional(),
+  aadhar: Joi.string().length(12).allow('').optional(),
   classId: Joi.string().required(),
   guardianName: Joi.string().optional(),
   guardianContact: Joi.string().optional(),
+  guardianOccupation: Joi.string().allow('').optional(),
   address: Joi.string().optional(),
   status: Joi.string().valid('active', 'inactive', 'passed', 'left').optional()
 });
@@ -119,6 +123,47 @@ router.post('/', authenticateToken, authorize(['students:create']), async (req, 
     if (error.code === 11000) {
       return res.status(400).json({ error: 'Admission number already exists' });
     }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update student
+router.put('/:id', authenticateToken, authorize(['students:update']), async (req, res) => {
+  try {
+    const { error } = studentSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ error: error.details[0].message });
+    }
+
+    const student = await Student.findByIdAndUpdate(req.params.id, req.body, { new: true }).populate('classId');
+
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    res.json({
+      ...student.toObject(),
+      studentId: student._id,
+      class: student.classId ? { ...student.classId.toObject(), classId: student.classId._id } : null
+    });
+  } catch (error) {
+    console.error('Update student error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Delete student
+router.delete('/:id', authenticateToken, authorize(['students:delete']), async (req, res) => {
+  try {
+    const deletedStudent = await Student.findByIdAndDelete(req.params.id);
+    
+    if (!deletedStudent) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    res.json({ message: 'Student deleted successfully' });
+  } catch (error) {
+    console.error('Delete student error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -9,10 +9,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { feesAPI, classesAPI } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
-import { Plus, Search, IndianRupee, AlertCircle, Calendar, Edit, Trash2 } from 'lucide-react';
+import { Plus, Search, IndianRupee, AlertCircle, Calendar, Edit, Trash2, MoreVertical } from 'lucide-react';
 
 export default function Fees() {
   const { hasPermission } = useAuth();
@@ -33,6 +34,8 @@ export default function Fees() {
     frequency: '',
     description: ''
   });
+  const [editingFee, setEditingFee] = useState(null);
+  const [showEditFeeDialog, setShowEditFeeDialog] = useState(false);
   const [generateData, setGenerateData] = useState({
     month: new Date().getMonth() + 1,
     year: new Date().getFullYear(),
@@ -149,6 +152,25 @@ export default function Fees() {
     }
   };
 
+  const handleEditFee = async (e) => {
+    e.preventDefault();
+    try {
+      await feesAPI.updateType(editingFee.feeTypeId, {
+        name: editingFee.name,
+        frequency: editingFee.frequency,
+        defaultAmount: parseFloat(editingFee.amount),
+        description: editingFee.description
+      });
+      
+      setShowEditFeeDialog(false);
+      setEditingFee(null);
+      fetchInitialData();
+    } catch (error) {
+      console.error('Error updating fee:', error);
+      alert(error.response?.data?.error || 'Error updating fee');
+    }
+  };
+
   if (loading) {
     return (
       <SidebarProvider>
@@ -261,6 +283,7 @@ export default function Fees() {
                             <option value="">Select Frequency</option>
                             <option value="monthly">Monthly</option>
                             <option value="quarterly">Quarterly</option>
+                            <option value="biannual">Biannual</option>
                             <option value="yearly">Yearly</option>
                             <option value="one_time">One Time</option>
                           </select>
@@ -349,6 +372,68 @@ export default function Fees() {
                     </DialogContent>
                   </Dialog>
 
+                  {/* Edit Fee Dialog */}
+                  <Dialog open={showEditFeeDialog} onOpenChange={setShowEditFeeDialog}>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Edit Fee</DialogTitle>
+                        <DialogDescription>Update fee details.</DialogDescription>
+                      </DialogHeader>
+                      {editingFee && (
+                        <form onSubmit={handleEditFee} className="space-y-4">
+                          <div>
+                            <Label htmlFor="edit-name">Fee Name</Label>
+                            <Input
+                              id="edit-name"
+                              value={editingFee.name}
+                              onChange={(e) => setEditingFee(prev => ({ ...prev, name: e.target.value }))}
+                              required
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="edit-amount">Amount</Label>
+                            <Input
+                              id="edit-amount"
+                              type="number"
+                              value={editingFee.amount}
+                              onChange={(e) => setEditingFee(prev => ({ ...prev, amount: e.target.value }))}
+                              required
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="edit-frequency">Frequency</Label>
+                            <select
+                              id="edit-frequency"
+                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                              value={editingFee.frequency}
+                              onChange={(e) => setEditingFee(prev => ({ ...prev, frequency: e.target.value }))}
+                              required
+                            >
+                              <option value="monthly">Monthly</option>
+                              <option value="quarterly">Quarterly</option>
+                              <option value="biannual">Biannual</option>
+                              <option value="yearly">Yearly</option>
+                              <option value="one_time">One Time</option>
+                            </select>
+                          </div>
+                          <div>
+                            <Label htmlFor="edit-description">Description</Label>
+                            <Input
+                              id="edit-description"
+                              value={editingFee.description}
+                              onChange={(e) => setEditingFee(prev => ({ ...prev, description: e.target.value }))}
+                            />
+                          </div>
+                          <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setShowEditFeeDialog(false)}>
+                              Cancel
+                            </Button>
+                            <Button type="submit">Update Fee</Button>
+                          </DialogFooter>
+                        </form>
+                      )}
+                    </DialogContent>
+                  </Dialog>
 
                 </>
               )}
@@ -442,15 +527,36 @@ export default function Fees() {
                           </span>
                         </TableCell>
                         <TableCell>
-                          {hasPermission('fees', 'delete') && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteClassFeeStructure(structure.classFeeId)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent>
+                              {hasPermission('fees', 'update') && (
+                                <DropdownMenuItem onClick={() => {
+                                  setEditingFee({
+                                    feeTypeId: structure.feeType.feeTypeId,
+                                    name: structure.feeType.name,
+                                    frequency: structure.feeType.frequency,
+                                    amount: structure.amount,
+                                    description: structure.feeType.description || ''
+                                  });
+                                  setShowEditFeeDialog(true);
+                                }}>
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  Edit
+                                </DropdownMenuItem>
+                              )}
+                              {hasPermission('fees', 'delete') && (
+                                <DropdownMenuItem onClick={() => handleDeleteClassFeeStructure(structure.classFeeId)}>
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </TableCell>
                       </TableRow>
                     ))}

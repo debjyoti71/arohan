@@ -5,14 +5,16 @@ import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbP
 import { Separator } from "@/components/ui/separator";
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { staffAPI } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
-import { Plus, Search, Edit, Trash2 } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, DollarSign, Calendar, MoreVertical } from 'lucide-react';
 
 export default function Staff() {
   const { hasPermission } = useAuth();
@@ -30,6 +32,8 @@ export default function Staff() {
     salary: '',
     contact: ''
   });
+  const [editingStaff, setEditingStaff] = useState(null);
+  const [showEditDialog, setShowEditDialog] = useState(false);
 
   useEffect(() => {
     fetchStaff();
@@ -88,6 +92,24 @@ export default function Staff() {
         console.error('Error deleting staff:', error);
         alert(error.response?.data?.error || 'Error deleting staff member');
       }
+    }
+  };
+
+  const handleEditStaff = async (e) => {
+    e.preventDefault();
+    try {
+      await staffAPI.update(editingStaff.staffId, {
+        ...editingStaff,
+        salary: parseFloat(editingStaff.salary),
+        joinDate: new Date(editingStaff.joinDate)
+      });
+      
+      setShowEditDialog(false);
+      setEditingStaff(null);
+      fetchStaff();
+    } catch (error) {
+      console.error('Error updating staff:', error);
+      alert(error.response?.data?.error || 'Error updating staff member');
     }
   };
 
@@ -156,7 +178,7 @@ export default function Staff() {
                           required
                         >
                           <option value="">Select Role</option>
-                          <option value="admin">Admin</option>
+
                           <option value="principal">Principal</option>
                           <option value="teacher">Teacher</option>
                           <option value="staff">Staff</option>
@@ -211,32 +233,119 @@ export default function Staff() {
             )}
           </div>
 
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                  <Input
-                    placeholder="Search staff..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-                <select
-                  className="flex h-10 w-48 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={selectedRole}
-                  onChange={(e) => setSelectedRole(e.target.value)}
-                >
-                  <option value="">All Roles</option>
-                  <option value="admin">Admin</option>
-                  <option value="principal">Principal</option>
-                  <option value="teacher">Teacher</option>
-                  <option value="staff">Staff</option>
-                </select>
-              </div>
-            </CardHeader>
-            <CardContent>
+          {/* Edit Staff Dialog */}
+          <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Edit Staff Member</DialogTitle>
+                <DialogDescription>Update staff member details.</DialogDescription>
+              </DialogHeader>
+              {editingStaff && (
+                <form onSubmit={handleEditStaff} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="edit-name">Full Name</Label>
+                      <Input
+                        id="edit-name"
+                        value={editingStaff.name}
+                        onChange={(e) => setEditingStaff(prev => ({ ...prev, name: e.target.value }))}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="edit-role">Role</Label>
+                      <select
+                        id="edit-role"
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={editingStaff.role}
+                        onChange={(e) => setEditingStaff(prev => ({ ...prev, role: e.target.value }))}
+                        required
+                      >
+                        <option value="principal">Principal</option>
+                        <option value="teacher">Teacher</option>
+                        <option value="staff">Staff</option>
+                      </select>
+                    </div>
+                    <div>
+                      <Label htmlFor="edit-qualification">Qualification</Label>
+                      <Input
+                        id="edit-qualification"
+                        value={editingStaff.qualification}
+                        onChange={(e) => setEditingStaff(prev => ({ ...prev, qualification: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="edit-joinDate">Join Date</Label>
+                      <Input
+                        id="edit-joinDate"
+                        type="date"
+                        value={editingStaff.joinDate}
+                        onChange={(e) => setEditingStaff(prev => ({ ...prev, joinDate: e.target.value }))}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="edit-salary">Salary</Label>
+                      <Input
+                        id="edit-salary"
+                        type="number"
+                        value={editingStaff.salary}
+                        onChange={(e) => setEditingStaff(prev => ({ ...prev, salary: e.target.value }))}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="edit-contact">Contact Number</Label>
+                      <Input
+                        id="edit-contact"
+                        value={editingStaff.contact}
+                        onChange={(e) => setEditingStaff(prev => ({ ...prev, contact: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button type="button" variant="outline" onClick={() => setShowEditDialog(false)}>
+                      Cancel
+                    </Button>
+                    <Button type="submit">Update Staff</Button>
+                  </DialogFooter>
+                </form>
+              )}
+            </DialogContent>
+          </Dialog>
+
+          <Tabs defaultValue="staff" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="staff">Staff Management</TabsTrigger>
+              <TabsTrigger value="transactions">Transaction History</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="staff">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-4">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                      <Input
+                        placeholder="Search staff..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                    <select
+                      className="flex h-10 w-48 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={selectedRole}
+                      onChange={(e) => setSelectedRole(e.target.value)}
+                    >
+                      <option value="">All Roles</option>
+                      <option value="principal">Principal</option>
+                      <option value="teacher">Teacher</option>
+                      <option value="staff">Staff</option>
+                    </select>
+                  </div>
+                </CardHeader>
+                <CardContent>
               {loading ? (
                 <div className="text-center py-8">Loading staff...</div>
               ) : (
@@ -260,7 +369,6 @@ export default function Staff() {
                           <TableCell className="font-medium">{member.name}</TableCell>
                           <TableCell>
                             <span className={`px-2 py-1 rounded-full text-xs ${
-                              member.role === 'admin' ? 'bg-red-100 text-red-800' :
                               member.role === 'principal' ? 'bg-purple-100 text-purple-800' :
                               member.role === 'teacher' ? 'bg-blue-100 text-blue-800' :
                               'bg-gray-100 text-gray-800'
@@ -281,17 +389,33 @@ export default function Staff() {
                             </span>
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-2">
-                              {hasPermission('staff', 'delete') && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleDeleteStaff(member.staffId)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm">
+                                  <MoreVertical className="h-4 w-4" />
                                 </Button>
-                              )}
-                            </div>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent>
+                                {hasPermission('staff', 'update') && (
+                                  <DropdownMenuItem onClick={() => {
+                                    setEditingStaff({
+                                      ...member,
+                                      joinDate: new Date(member.joinDate).toISOString().split('T')[0]
+                                    });
+                                    setShowEditDialog(true);
+                                  }}>
+                                    <Edit className="mr-2 h-4 w-4" />
+                                    Edit
+                                  </DropdownMenuItem>
+                                )}
+                                {hasPermission('staff', 'delete') && (
+                                  <DropdownMenuItem onClick={() => handleDeleteStaff(member.staffId)}>
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -326,9 +450,25 @@ export default function Staff() {
                     </div>
                   </div>
                 </>
-              )}
-            </CardContent>
-          </Card>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+            
+            <TabsContent value="transactions">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Transaction History</CardTitle>
+                  <p className="text-sm text-muted-foreground">View salary distribution history for all staff members</p>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-center py-8 text-muted-foreground">
+                    Transaction history feature will be implemented here
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </div>
       </SidebarInset>
     </SidebarProvider>

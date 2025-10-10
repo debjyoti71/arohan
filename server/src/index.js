@@ -15,6 +15,7 @@ const classRoutes = require('./routes/classes');
 const userRoutes = require('./routes/users');
 const feeRoutes = require('./routes/fees');
 const dashboardRoutes = require('./routes/dashboard');
+const financeRoutes = require('./routes/finance');
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -29,7 +30,7 @@ app.use(cors({
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+  max: 1000 // limit each IP to 1000 requests per windowMs
 });
 app.use(limiter);
 
@@ -45,6 +46,7 @@ app.use('/api/classes', classRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/fees', feeRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/finance', financeRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

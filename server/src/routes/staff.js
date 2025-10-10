@@ -3,6 +3,7 @@ const Joi = require('joi');
 const Staff = require('../models/Staff');
 const User = require('../models/User');
 const Class = require('../models/Class');
+const StaffTransaction = require('../models/StaffTransaction');
 const { authenticateToken, authorize } = require('../middleware/auth');
 
 const router = express.Router();
@@ -10,12 +11,22 @@ const router = express.Router();
 // Validation schemas
 const staffSchema = Joi.object({
   name: Joi.string().required(),
-  role: Joi.string().valid('admin', 'principal', 'teacher', 'staff').required(),
+  role: Joi.string().valid('principal', 'teacher', 'staff').required(),
   qualification: Joi.string().optional(),
   joinDate: Joi.date().required(),
   salary: Joi.number().positive().required(),
   contact: Joi.string().optional(),
   status: Joi.string().valid('active', 'inactive').optional()
+});
+
+const transactionSchema = Joi.object({
+  staffId: Joi.string().required(),
+  amount: Joi.number().positive().required(),
+  transactionType: Joi.string().valid('salary', 'bonus', 'deduction').optional(),
+  month: Joi.number().min(1).max(12).required(),
+  year: Joi.number().min(2020).required(),
+  paymentDate: Joi.date().required(),
+  remarks: Joi.string().optional()
 });
 
 // Get all staff with pagination and filtering
@@ -96,9 +107,6 @@ router.post('/', authenticateToken, authorize(['staff:create']), async (req, res
     });
   } catch (error) {
     console.error('Create staff error:', error);
-    if (error.code === 11000) {
-      return res.status(400).json({ error: 'Contact number already exists' });
-    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -123,9 +131,6 @@ router.put('/:id', authenticateToken, authorize(['staff:update']), async (req, r
     });
   } catch (error) {
     console.error('Update staff error:', error);
-    if (error.code === 11000) {
-      return res.status(400).json({ error: 'Contact number already exists' });
-    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -160,6 +165,67 @@ router.delete('/:id', authenticateToken, authorize(['staff:delete']), async (req
     res.json({ message: 'Staff member deleted successfully' });
   } catch (error) {
     console.error('Delete staff error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get staff transactions
+router.get('/:id/transactions', authenticateToken, authorize(['staff:read']), async (req, res) => {
+  try {
+    const { page = 1, limit = 10, year, month } = req.query;
+    const skip = (page - 1) * limit;
+    
+    const filter = { staffId: req.params.id };
+    if (year) filter.year = parseInt(year);
+    if (month) filter.month = parseInt(month);
+
+    const [transactions, total] = await Promise.all([
+      StaffTransaction.find(filter)
+        .populate('staffId')
+        .skip(parseInt(skip))
+        .limit(parseInt(limit))
+        .sort({ year: -1, month: -1, paymentDate: -1 }),
+      StaffTransaction.countDocuments(filter)
+    ]);
+
+    res.json({
+      transactions: transactions.map(t => ({
+        ...t.toObject(),
+        transactionId: t._id
+      })),
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Get staff transactions error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Add staff transaction
+router.post('/transactions', authenticateToken, authorize(['staff:create']), async (req, res) => {
+  try {
+    const { error } = transactionSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ error: error.details[0].message });
+    }
+
+    const transaction = await StaffTransaction.create(req.body);
+    await transaction.populate('staffId');
+
+    res.status(201).json({
+      ...transaction.toObject(),
+      transactionId: transaction._id
+    });
+  } catch (error) {
+    console.error('Create staff transaction error:', error);
+    if (error.code === 11000) {
+      return res.status(400).json({ error: 'Transaction already exists for this staff member in the specified month/year' });
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });
