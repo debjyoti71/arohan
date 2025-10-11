@@ -106,6 +106,8 @@ export const feesAPI = {
   recordPayment: (data) => api.post('/fees/payment', data),
   generateFees: (data) => api.post('/fees/generate', data),
   getDueSummary: () => api.get('/fees/due-summary'),
+  getStudentFeeSummary: (studentId) => api.get(`/finance/students/${studentId}/fee-summary`),
+  processPaymentWithRatio: (data) => api.post('/finance/payment-with-ratio', data),
 };
 
 // Finance API
@@ -116,6 +118,13 @@ export const financeAPI = {
   getTransactions: (params) => api.get('/finance/transactions', { params }),
   createTransaction: (data) => api.post('/finance/transactions', data),
   getSummary: () => api.get('/finance/summary'),
+};
+
+// Upload API
+export const uploadAPI = {
+  uploadStudentImage: (formData) => api.post('/upload/student-image', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
 };
 
 export default api;

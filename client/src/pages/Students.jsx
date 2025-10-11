@@ -9,13 +9,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { studentsAPI, classesAPI, feesAPI } from '@/lib/api';
+import { studentsAPI, classesAPI, feesAPI, uploadAPI } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
-import { Plus, Search, Eye, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, ChevronLeft, ChevronRight, Camera, Upload } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 // import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
+import CameraCapture from '@/components/CameraCapture';
 
 export default function Students() {
   const { hasPermission } = useAuth();
@@ -38,21 +39,42 @@ export default function Students() {
     guardianName: '',
     guardianContact: '',
     guardianOccupation: '',
-    address: ''
+    address: '',
+    profileImage: ''
   });
   const [selectedClassFees, setSelectedClassFees] = useState([]);
   const [feeCustomizations, setFeeCustomizations] = useState({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+  const [selectedClass, setSelectedClass] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('');
+  const [filteredStudents, setFilteredStudents] = useState([]);
+  const [showCamera, setShowCamera] = useState(false);
+  const [studentImage, setStudentImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     fetchStudents();
     fetchClasses();
-  }, [searchTerm]);
+  }, []);
+
+  useEffect(() => {
+    fetchStudents();
+  }, [searchTerm, selectedClass, selectedStatus]);
+
+
 
   const fetchStudents = async () => {
     try {
-      const params = { limit: 50, ...(searchTerm && { search: searchTerm }) };
+      const params = { limit: 100 };
+      if (selectedClass) params.classId = selectedClass;
+      if (selectedStatus) params.status = selectedStatus;
+      if (searchTerm) params.search = searchTerm;
+      
       const response = await studentsAPI.getAll(params);
       setStudents(response.data.students);
+      setFilteredStudents(response.data.students);
     } catch (error) {
       console.error('Error fetching students:', error);
     } finally {
@@ -106,11 +128,38 @@ export default function Students() {
     }));
   };
 
-  const handleAddStudent = async () => {
+  const handleImageCapture = async (file) => {
+    setStudentImage(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  const uploadImage = async () => {
+    if (!studentImage) return '';
     
+    setUploadingImage(true);
     try {
+      const formData = new FormData();
+      formData.append('image', studentImage);
+      const response = await uploadAPI.uploadStudentImage(formData);
+      return response.data.imageUrl;
+    } catch (error) {
+      console.error('Image upload error:', error);
+      return '';
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleAddStudent = async () => {
+    try {
+      let imageUrl = '';
+      if (studentImage) {
+        imageUrl = await uploadImage();
+      }
+      
       const studentData = {
-        ...newStudent
+        ...newStudent,
+        profileImage: imageUrl
       };
       
       const response = await studentsAPI.create(studentData);
@@ -141,10 +190,13 @@ export default function Students() {
         guardianName: '',
         guardianContact: '',
         guardianOccupation: '',
-        address: ''
+        address: '',
+        profileImage: ''
       });
       setSelectedClassFees([]);
       setFeeCustomizations({});
+      setStudentImage(null);
+      setImagePreview('');
       fetchStudents();
     } catch (error) {
       console.error('Error adding student:', error);
@@ -202,6 +254,38 @@ export default function Students() {
                     {currentStep === 1 && (
                       <div className="space-y-4">
                         <h3 className="text-lg font-semibold">Student Information</h3>
+                        
+                        {/* Image Upload Section */}
+                        <div className="space-y-2">
+                          <Label>Student Photo</Label>
+                          <div className="flex items-center gap-4">
+                            {imagePreview && (
+                              <img src={imagePreview} alt="Preview" className="w-20 h-20 rounded-full object-cover border" />
+                            )}
+                            <div className="flex gap-2">
+                              <Button type="button" variant="outline" onClick={() => setShowCamera(true)}>
+                                <Camera className="mr-2 h-4 w-4" />
+                                Take Photo
+                              </Button>
+                              <div className="relative">
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={(e) => {
+                                    const file = e.target.files[0];
+                                    if (file) handleImageCapture(file);
+                                  }}
+                                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                />
+                                <Button type="button" variant="outline">
+                                  <Upload className="mr-2 h-4 w-4" />
+                                  Upload Photo
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <Label htmlFor="name">Student Name</Label>
@@ -391,7 +475,8 @@ export default function Students() {
                                   <Input
                                     value={feeCustomizations[fee.feeTypeId]?.remarks || ''}
                                     onChange={(e) => handleFeeCustomizationChange(fee.feeTypeId, 'remarks', e.target.value)}
-                                    placeholder="Optional remarks"
+                                    placeholder={parseFloat(feeCustomizations[fee.feeTypeId]?.customAmount || fee.amount) !== fee.amount ? "Remarks required" : "Optional remarks"}
+                                    required={parseFloat(feeCustomizations[fee.feeTypeId]?.customAmount || fee.amount) !== fee.amount}
                                     className="w-32"
                                   />
                                 </TableCell>
@@ -434,7 +519,9 @@ export default function Students() {
                             <ChevronRight className="ml-2 h-4 w-4" />
                           </Button>
                         ) : (
-                          <Button type="button" onClick={handleAddStudent}>Add Student</Button>
+                          <Button type="button" onClick={handleAddStudent} disabled={uploadingImage}>
+                            {uploadingImage ? 'Uploading...' : 'Add Student'}
+                          </Button>
                         )}
                       </div>
                     </DialogFooter>
@@ -443,6 +530,22 @@ export default function Students() {
               </Dialog>
             )}
           </div>
+          
+          {/* Camera Dialog */}
+          <Dialog open={showCamera} onOpenChange={setShowCamera}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Take Student Photo</DialogTitle>
+                <DialogDescription>
+                  Use your camera to take a photo or upload an image file.
+                </DialogDescription>
+              </DialogHeader>
+              <CameraCapture 
+                onImageCapture={handleImageCapture}
+                onClose={() => setShowCamera(false)}
+              />
+            </DialogContent>
+          </Dialog>
 
           <Card>
             <CardContent className="p-6">
@@ -450,53 +553,108 @@ export default function Students() {
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                   <Input
-                    placeholder="Search students..."
+                    placeholder="Search students by 'name' or 'guardian name' or 'admission number'..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-10"
                   />
                 </div>
+                <select
+                  className="flex h-10 w-48 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={selectedClass}
+                  onChange={(e) => setSelectedClass(e.target.value)}
+                >
+                  <option value="">All Classes</option>
+                  {classes.map(cls => (
+                    <option key={cls.classId} value={cls.classId}>
+                      {cls.className}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="flex h-10 w-32 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={selectedStatus}
+                  onChange={(e) => setSelectedStatus(e.target.value)}
+                >
+                  <option value="">All Status</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
               </div>
 
               {loading ? (
                 <div className="text-center py-8">Loading students...</div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Admission No</TableHead>
-                      <TableHead>Class</TableHead>
-                      <TableHead>Guardian</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {students.map((student) => (
-                      <TableRow key={student.studentId}>
-                        <TableCell className="font-medium">{student.name}</TableCell>
-                        <TableCell>{student.admissionNo}</TableCell>
-                        <TableCell>{student.class?.className}</TableCell>
-                        <TableCell>{student.guardianName}</TableCell>
-                        <TableCell>
-                          <span className={`px-2 py-1 rounded-full text-xs ${
-                            student.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                          }`}>
-                            {student.status}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <Button asChild variant="ghost" size="sm">
-                            <Link to={`/students/${student.studentId}`}>
-                              <Eye className="h-4 w-4" />
-                            </Link>
-                          </Button>
-                        </TableCell>
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Photo</TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Admission No</TableHead>
+                        <TableHead>Class</TableHead>
+                        <TableHead>Guardian</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Actions</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredStudents.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((student) => (
+                        <TableRow key={student.studentId}>
+                          <TableCell>
+                            <img 
+                              src={student.profileImage || '/default-avatar.png'} 
+                              alt={student.name}
+                              className="w-8 h-8 rounded-full object-cover"
+                              onError={(e) => {
+                                e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name)}&size=32&background=random`;
+                              }}
+                            />
+                          </TableCell>
+                          <TableCell className="font-medium">{student.name}</TableCell>
+                          <TableCell>{student.admissionNo}</TableCell>
+                          <TableCell>{student.class?.className}</TableCell>
+                          <TableCell>{student.guardianName}</TableCell>
+                          <TableCell>
+                            <span className={`px-2 py-1 rounded-full text-xs ${
+                              student.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                            }`}>
+                              {student.status}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <Button asChild variant="ghost" size="sm">
+                              <Link to={`/students/${student.studentId}`}>
+                                <Eye className="h-4 w-4" />
+                              </Link>
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {/* Pagination */}
+                  <div className="flex items-center justify-between mt-4">
+                    <p className="text-sm text-muted-foreground">
+                      Showing {Math.min(filteredStudents.length, itemsPerPage)} of {filteredStudents.length} students
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm" onClick={() => setCurrentPage(1)} disabled={currentPage === 1}>
+                        First
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => prev - 1)} disabled={currentPage === 1}>
+                        Previous
+                      </Button>
+                      <span className="text-sm px-3">Page {currentPage} of {Math.ceil(filteredStudents.length / itemsPerPage)}</span>
+                      <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => prev + 1)} disabled={currentPage >= Math.ceil(filteredStudents.length / itemsPerPage)}>
+                        Next
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => setCurrentPage(Math.ceil(filteredStudents.length / itemsPerPage))} disabled={currentPage >= Math.ceil(filteredStudents.length / itemsPerPage)}>
+                        Last
+                      </Button>
+                    </div>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>

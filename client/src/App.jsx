@@ -10,6 +10,7 @@ import Users from './pages/Users';
 import Fees from './pages/Fees';
 import Finance from './pages/Finance';
 import StudentProfile from './pages/StudentProfile';
+import FeeCollection from './pages/FeeCollection';
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -102,6 +103,14 @@ function App() {
       element: (
         <ProtectedRoute>
           <Finance />
+        </ProtectedRoute>
+      ) 
+    },
+    { 
+      path: "/fee-collection", 
+      element: (
+        <ProtectedRoute>
+          <FeeCollection />
         </ProtectedRoute>
       ) 
     },

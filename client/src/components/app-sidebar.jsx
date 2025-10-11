@@ -7,6 +7,7 @@ import {
   UserCheck,
   IndianRupee,
   Wallet,
+  CreditCard,
 } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
 import { NavMain } from "@/components/nav-main"
@@ -58,6 +59,12 @@ export function AppSidebar({ ...props }) {
       url: "/fees",
       icon: IndianRupee,
       isActive: window.location.pathname === '/fees',
+    }] : []),
+    ...(hasPermission('fees', 'read') ? [{
+      title: "Fee Collection",
+      url: "/fee-collection",
+      icon: CreditCard,
+      isActive: window.location.pathname === '/fee-collection',
     }] : []),
     {
       title: "Finance",

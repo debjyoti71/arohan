@@ -23,6 +23,7 @@ const studentSchema = Joi.object({
   guardianContact: Joi.string().optional(),
   guardianOccupation: Joi.string().allow('').optional(),
   address: Joi.string().optional(),
+  profileImage: Joi.string().allow('').optional(),
   status: Joi.string().valid('active', 'inactive', 'passed', 'left').optional()
 });
 
@@ -174,7 +175,26 @@ router.put('/:id/fee-structure', authenticateToken, authorize(['students:update'
     const studentId = req.params.id;
     const { customizations } = req.body;
 
+    // Get student's class to fetch default fee structure
+    const student = await Student.findById(studentId).populate('classId');
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    const classFeeStructure = await ClassFeeStructure.find({ classId: student.classId, active: true });
+
     for (const fee of customizations) {
+      // Find default amount for this fee type
+      const defaultFee = classFeeStructure.find(cf => cf.feeTypeId.toString() === fee.feeTypeId.toString());
+      const defaultAmount = defaultFee ? defaultFee.amount : 0;
+      
+      // Validate remarks requirement
+      if (fee.customAmount !== defaultAmount && (!fee.remarks || fee.remarks.trim() === '')) {
+        return res.status(400).json({ 
+          error: `Remarks are required when changing fee amount from default value` 
+        });
+      }
+
       await StudentFeeCustom.findOneAndUpdate(
         { studentId, feeTypeId: fee.feeTypeId },
         {

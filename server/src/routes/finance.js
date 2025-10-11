@@ -2,6 +2,8 @@ const express = require('express');
 const Joi = require('joi');
 const Account = require('../models/Account');
 const Transaction = require('../models/Transaction');
+const FeeCalculator = require('../utils/feeCalculator');
+const FeePaymentSummary = require('../models/FeePaymentSummary');
 const { authenticateToken, authorize } = require('../middleware/auth');
 
 const router = express.Router();
@@ -22,9 +24,18 @@ const transactionSchema = Joi.object({
   type: Joi.string().valid('income', 'expense', 'transfer').required(),
   category: Joi.string().valid('fees', 'donation', 'investment', 'salary', 'maintenance', 'supplies', 'utilities', 'transport', 'transfer', 'other').required(),
   amount: Joi.number().positive().required(),
-  description: Joi.string().required(),
+  description: Joi.when('category', {
+    is: 'other',
+    then: Joi.string().required(),
+    otherwise: Joi.string().allow('').optional()
+  }),
   fromAccount: Joi.string().allow('').optional(),
   toAccount: Joi.string().allow('').optional(),
+  staffId: Joi.when('category', {
+    is: 'salary',
+    then: Joi.string().required(),
+    otherwise: Joi.string().allow('').optional()
+  }),
   transactionDate: Joi.date().required(),
   referenceNumber: Joi.string().allow('').optional()
 });
@@ -140,8 +151,27 @@ router.post('/transactions', authenticateToken, authorize(['finance:create']), a
     if (!transactionData.toAccount) {
       delete transactionData.toAccount;
     }
+    if (!transactionData.staffId) {
+      delete transactionData.staffId;
+    }
 
     const transaction = await Transaction.create(transactionData);
+
+    // Create staff transaction for salary payments
+    if (transaction.category === 'salary' && transaction.staffId) {
+      const StaffTransaction = require('../models/StaffTransaction');
+      const transactionDate = new Date(transaction.transactionDate);
+      
+      await StaffTransaction.create({
+        staffId: transaction.staffId,
+        amount: transaction.amount,
+        transactionType: 'salary',
+        month: transactionDate.getMonth() + 1,
+        year: transactionDate.getFullYear(),
+        paymentDate: transaction.transactionDate,
+        remarks: transaction.description || 'Salary payment'
+      });
+    }
 
     // Update account balances
     if (transaction.type === 'income' && transaction.toAccount) {
@@ -226,6 +256,150 @@ router.get('/summary', authenticateToken, authorize(['finance:read']), async (re
   } catch (error) {
     console.error('Get finance summary error:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get student fee summary with payment ratios
+router.get('/students/:id/fee-summary', authenticateToken, authorize(['fees:read']), async (req, res) => {
+  try {
+    const StudentFeeCustom = require('../models/StudentFeeCustom');
+    const FeeType = require('../models/FeeType');
+    
+    const customFees = await StudentFeeCustom.find({ studentId: req.params.id })
+      .populate('feeTypeId');
+    
+    const summaries = [];
+    for (const customFee of customFees) {
+      const status = await FeeCalculator.calculateFeeStatus(req.params.id, customFee.feeTypeId._id);
+      if (status) {
+        summaries.push({
+          feeType: customFee.feeTypeId.name,
+          ...status
+        });
+      }
+    }
+    
+    res.json(summaries);
+  } catch (error) {
+    console.error('Get student fee summary error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Process fee payment with ratio calculation
+router.post('/payment-with-ratio', authenticateToken, authorize(['fees:create']), async (req, res) => {
+  try {
+    const { studentId, feeTypeId, amount, paymentMethod, paymentDate } = req.body;
+    
+    // Validate input
+    if (!studentId || !feeTypeId || !amount) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Update payment status
+    const summary = await FeeCalculator.updatePaymentStatus(
+      studentId, 
+      feeTypeId, 
+      parseFloat(amount)
+    );
+
+    if (!summary) {
+      return res.status(400).json({ error: 'Invalid fee structure or student not found' });
+    }
+
+    res.json({
+      success: true,
+      updatedRatio: {
+        feeTypeId,
+        paymentRatio: FeeCalculator.calculatePaymentRatio(summary.periodsPaid, summary.totalPeriods),
+        status: summary.status
+      }
+    });
+  } catch (error) {
+    console.error('Process payment error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Apply discount to student fee
+router.post('/apply-discount', authenticateToken, authorize(['fees:update']), async (req, res) => {
+  try {
+    const { studentId, feeTypeId, discountAmount, discountReason, effectiveFrom, effectiveTo } = req.body;
+    
+    const StudentFeeCustom = require('../models/StudentFeeCustom');
+    
+    await StudentFeeCustom.findOneAndUpdate(
+      { studentId, feeTypeId },
+      {
+        discountAmount: parseFloat(discountAmount) || 0,
+        discountReason: discountReason || 'other',
+        effectiveFrom: effectiveFrom ? new Date(effectiveFrom) : new Date(),
+        effectiveTo: effectiveTo ? new Date(effectiveTo) : null
+      },
+      { upsert: true, new: true }
+    );
+
+    res.json({ success: true, message: 'Discount applied successfully' });
+  } catch (error) {
+    console.error('Apply discount error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Manual trigger for fee recalculation (for testing)
+router.post('/trigger-fee-recalculation', authenticateToken, authorize(['finance:create']), async (req, res) => {
+  try {
+    const FeeScheduler = require('../utils/feeScheduler');
+    await FeeScheduler.triggerRecalculation();
+    res.json({ success: true, message: 'Fee recalculation triggered successfully' });
+  } catch (error) {
+    console.error('Trigger recalculation error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Manual trigger for auto fee generation (for testing)
+router.post('/trigger-auto-generation', authenticateToken, authorize(['finance:create']), async (req, res) => {
+  try {
+    const AutoFeeGenerator = require('../utils/autoFeeGenerator');
+    await AutoFeeGenerator.triggerGeneration();
+    res.json({ success: true, message: 'Auto fee generation triggered successfully' });
+  } catch (error) {
+    console.error('Trigger auto generation error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get fee configuration
+router.get('/fee-config', authenticateToken, authorize(['fees:read']), async (req, res) => {
+  try {
+    const feeConfig = require('../../config/fees');
+    res.json(feeConfig);
+  } catch (error) {
+    console.error('Get fee config error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update fee configuration
+router.put('/fee-config', authenticateToken, authorize(['finance:update']), async (req, res) => {
+  try {
+    const ConfigManager = require('../utils/configManager');
+    
+    // Validate the config updates
+    ConfigManager.validateConfig({ ...require('../../config/fees'), ...req.body });
+    
+    // Update configuration
+    const newConfig = await ConfigManager.updateFeeConfig(req.body);
+    
+    res.json({ 
+      success: true, 
+      message: 'Fee configuration updated successfully',
+      config: newConfig 
+    });
+  } catch (error) {
+    console.error('Update fee config error:', error);
+    res.status(400).json({ error: error.message || 'Internal server error' });
   }
 });
 

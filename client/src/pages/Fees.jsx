@@ -13,7 +13,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Label } from "@/components/ui/label";
 import { feesAPI, classesAPI } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
-import { Plus, Search, IndianRupee, AlertCircle, Calendar, Edit, Trash2, MoreVertical } from 'lucide-react';
+import { Plus, Search, IndianRupee, AlertCircle, Edit, Trash2, MoreVertical } from 'lucide-react';
 
 export default function Fees() {
   const { hasPermission } = useAuth();
@@ -25,7 +25,7 @@ export default function Fees() {
   const [loading, setLoading] = useState(true);
 
   const [showAddFeeDialog, setShowAddFeeDialog] = useState(false);
-  const [showGenerateDialog, setShowGenerateDialog] = useState(false);
+
 
   const [newFee, setNewFee] = useState({
     classId: '',
@@ -36,11 +36,9 @@ export default function Fees() {
   });
   const [editingFee, setEditingFee] = useState(null);
   const [showEditFeeDialog, setShowEditFeeDialog] = useState(false);
-  const [generateData, setGenerateData] = useState({
-    month: new Date().getMonth() + 1,
-    year: new Date().getFullYear(),
-    classIds: []
-  });
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   useEffect(() => {
     fetchInitialData();
@@ -75,7 +73,7 @@ export default function Fees() {
   const fetchFeeRecords = async () => {
     try {
       const response = await feesAPI.getRecords({ limit: 50 });
-      setFeeRecords(response.data.feeRecords);
+      setFeeRecords(response.data.records || []);
     } catch (error) {
       console.error('Error fetching fee records:', error);
     }
@@ -116,27 +114,7 @@ export default function Fees() {
     }
   };
 
-  const handleGenerateFees = async (e) => {
-    e.preventDefault();
-    try {
-      const response = await feesAPI.generateFees(generateData);
-      alert(response.data.message);
-      setShowGenerateDialog(false);
-      fetchInitialData();
-    } catch (error) {
-      console.error('Error generating fees:', error);
-      alert(error.response?.data?.error || 'Error generating fees');
-    }
-  };
 
-  const toggleClassSelection = (classId) => {
-    setGenerateData(prev => ({
-      ...prev,
-      classIds: prev.classIds.includes(classId)
-        ? prev.classIds.filter(id => id !== classId)
-        : [...prev.classIds, classId]
-    }));
-  };
 
 
 
@@ -307,70 +285,7 @@ export default function Fees() {
                     </DialogContent>
                   </Dialog>
 
-                  <Dialog open={showGenerateDialog} onOpenChange={setShowGenerateDialog}>
-                    <DialogTrigger asChild>
-                      <Button variant="outline">
-                        <Calendar className="mr-2 h-4 w-4" />
-                        Generate Fees
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Generate Monthly Fees</DialogTitle>
-                        <DialogDescription>Generate fee records for selected classes and month.</DialogDescription>
-                      </DialogHeader>
-                      <form onSubmit={handleGenerateFees} className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <Label htmlFor="month">Month</Label>
-                            <select
-                              id="month"
-                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                              value={generateData.month}
-                              onChange={(e) => setGenerateData(prev => ({ ...prev, month: parseInt(e.target.value) }))}
-                            >
-                              {Array.from({ length: 12 }, (_, i) => (
-                                <option key={i + 1} value={i + 1}>
-                                  {new Date(2024, i).toLocaleString('default', { month: 'long' })}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <Label htmlFor="year">Year</Label>
-                            <Input
-                              id="year"
-                              type="number"
-                              value={generateData.year}
-                              onChange={(e) => setGenerateData(prev => ({ ...prev, year: parseInt(e.target.value) }))}
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <Label>Select Classes (leave empty for all classes)</Label>
-                          <div className="grid grid-cols-2 gap-2 mt-2">
-                            {classes.map(cls => (
-                              <label key={cls.classId} className="flex items-center space-x-2">
-                                <input
-                                  type="checkbox"
-                                  checked={generateData.classIds.includes(cls.classId)}
-                                  onChange={() => toggleClassSelection(cls.classId)}
-                                  className="rounded border-gray-300"
-                                />
-                                <span className="text-sm">{cls.className}</span>
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                        <DialogFooter>
-                          <Button type="button" variant="outline" onClick={() => setShowGenerateDialog(false)}>
-                            Cancel
-                          </Button>
-                          <Button type="submit">Generate Fees</Button>
-                        </DialogFooter>
-                      </form>
-                    </DialogContent>
-                  </Dialog>
+
 
                   {/* Edit Fee Dialog */}
                   <Dialog open={showEditFeeDialog} onOpenChange={setShowEditFeeDialog}>
@@ -441,7 +356,7 @@ export default function Fees() {
           </div>
 
           {/* Outstanding Fees Alert */}
-          {dueSummary && dueSummary.summary.totalOutstanding > 0 && (
+          {dueSummary && dueSummary.length > 0 && (
             <Card className="border-orange-200 bg-orange-50">
               <CardHeader className="flex flex-row items-center gap-2">
                 <AlertCircle className="h-5 w-5 text-orange-600" />
@@ -449,7 +364,7 @@ export default function Fees() {
               </CardHeader>
               <CardContent>
                 <p className="text-orange-700">
-                  ₹{dueSummary.summary.totalOutstanding.toLocaleString()} in outstanding fees from {dueSummary.summary.recordCount} records need attention.
+                  {dueSummary.length} students have outstanding fees totaling ₹{dueSummary.reduce((sum, student) => sum + student.totalDue, 0).toLocaleString()}.
                 </p>
               </CardContent>
             </Card>
@@ -509,14 +424,14 @@ export default function Fees() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {classFeeStructures.map((structure) => (
+                    {classFeeStructures.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((structure) => (
                       <TableRow key={structure.classFeeId}>
-                        <TableCell className="font-medium">{structure.class.className}</TableCell>
-                        <TableCell>{structure.feeType.name}</TableCell>
-                        <TableCell>₹{structure.amount.toLocaleString()}</TableCell>
+                        <TableCell className="font-medium">{structure.class?.className || 'N/A'}</TableCell>
+                        <TableCell>{structure.feeType?.name || 'N/A'}</TableCell>
+                        <TableCell>₹{structure.amount?.toLocaleString() || '0'}</TableCell>
                         <TableCell>
                           <span className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
-                            {structure.feeType.frequency.replace('_', ' ')}
+                            {structure.feeType?.frequency?.replace('_', ' ') || 'N/A'}
                           </span>
                         </TableCell>
                         <TableCell>
@@ -534,7 +449,7 @@ export default function Fees() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent>
-                              {hasPermission('fees', 'update') && (
+                              {hasPermission('fees', 'update') && structure.feeType && (
                                 <DropdownMenuItem onClick={() => {
                                   setEditingFee({
                                     feeTypeId: structure.feeType.feeTypeId,
@@ -562,6 +477,27 @@ export default function Fees() {
                     ))}
                   </TableBody>
                 </Table>
+                {/* Pagination */}
+                <div className="flex items-center justify-between mt-4">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {Math.min(classFeeStructures.length, itemsPerPage)} of {classFeeStructures.length} fee structures
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(1)} disabled={currentPage === 1}>
+                      First
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => prev - 1)} disabled={currentPage === 1}>
+                      Previous
+                    </Button>
+                    <span className="text-sm px-3">Page {currentPage} of {Math.ceil(classFeeStructures.length / itemsPerPage)}</span>
+                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => prev + 1)} disabled={currentPage >= Math.ceil(classFeeStructures.length / itemsPerPage)}>
+                      Next
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(Math.ceil(classFeeStructures.length / itemsPerPage))} disabled={currentPage >= Math.ceil(classFeeStructures.length / itemsPerPage)}>
+                      Last
+                    </Button>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -587,9 +523,9 @@ export default function Fees() {
                   </TableHeader>
                   <TableBody>
                     {feeRecords.map((record) => (
-                      <TableRow key={record.feeRecordId}>
-                        <TableCell className="font-medium">{record.student.name}</TableCell>
-                        <TableCell>{record.feeType.name}</TableCell>
+                      <TableRow key={record._id}>
+                        <TableCell className="font-medium">{record.student?.name || 'N/A'}</TableCell>
+                        <TableCell>{record.feeType?.name || 'N/A'}</TableCell>
                         <TableCell>{record.month}</TableCell>
                         <TableCell>₹{record.amountDue.toLocaleString()}</TableCell>
                         <TableCell>₹{record.amountPaid.toLocaleString()}</TableCell>
@@ -623,29 +559,23 @@ export default function Fees() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Student</TableHead>
-                      <TableHead>Class</TableHead>
-                      <TableHead>Fee Type</TableHead>
-                      <TableHead>Month</TableHead>
-                      <TableHead>Due Amount</TableHead>
-                      <TableHead>Paid Amount</TableHead>
-                      <TableHead>Outstanding</TableHead>
-                      <TableHead>Due Date</TableHead>
+                      <TableHead>Student Name</TableHead>
+                      <TableHead>Admission No</TableHead>
+                      <TableHead>Guardian Name</TableHead>
+                      <TableHead>Guardian Contact</TableHead>
+                      <TableHead>Total Outstanding</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {dueSummary.dueFees.map((record) => (
-                      <TableRow key={record.feeRecordId}>
-                        <TableCell className="font-medium">{record.student.name}</TableCell>
-                        <TableCell>{record.student.class.className}</TableCell>
-                        <TableCell>{record.feeType.name}</TableCell>
-                        <TableCell>{record.month}</TableCell>
-                        <TableCell>₹{record.amountDue.toLocaleString()}</TableCell>
-                        <TableCell>₹{record.amountPaid.toLocaleString()}</TableCell>
+                    {dueSummary.map((student) => (
+                      <TableRow key={student.studentId}>
+                        <TableCell className="font-medium">{student.name}</TableCell>
+                        <TableCell>{student.admissionNo}</TableCell>
+                        <TableCell>{student.guardianName}</TableCell>
+                        <TableCell>{student.guardianContact}</TableCell>
                         <TableCell className="font-semibold text-red-600">
-                          ₹{(record.amountDue - record.amountPaid).toLocaleString()}
+                          ₹{student.totalDue.toLocaleString()}
                         </TableCell>
-                        <TableCell>{new Date(record.dueDate).toLocaleDateString()}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

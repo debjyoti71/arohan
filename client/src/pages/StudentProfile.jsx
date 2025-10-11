@@ -309,7 +309,8 @@ export default function StudentProfile() {
                                       <Input
                                         value={feeCustomizations[feeTypeId]?.remarks || ''}
                                         onChange={(e) => handleFeeCustomizationChange(feeTypeId, 'remarks', e.target.value)}
-                                        placeholder="Optional remarks"
+                                        placeholder={parseFloat(feeCustomizations[feeTypeId]?.customAmount || fee.amount) !== fee.amount ? "Remarks required" : "Optional remarks"}
+                                        required={parseFloat(feeCustomizations[feeTypeId]?.customAmount || fee.amount) !== fee.amount}
                                         className="w-32"
                                       />
                                     </TableCell>
@@ -343,9 +344,10 @@ export default function StudentProfile() {
                       
                       return (
                         <div key={feeTypeId} className={`flex justify-between items-center p-2 rounded ${!isApplicable ? 'opacity-50' : ''}`}>
-                          <div>
+                          <div className="flex-1">
                             <p className="font-medium">{feeName}</p>
                             <p className="text-sm text-muted-foreground">{feeFrequency?.replace('_', ' ')}</p>
+                            {custom?.remarks && <p className="text-xs text-blue-600 mt-1">{custom.remarks}</p>}
                           </div>
                           <div className="text-right">
                             <p className="font-semibold">₹{amount.toLocaleString()}</p>

@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
-import { financeAPI } from '@/lib/api';
+import { financeAPI, staffAPI } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { Plus, Wallet, TrendingUp, TrendingDown, ArrowRightLeft, MoreVertical, Edit, Trash2 } from 'lucide-react';
 
@@ -21,6 +21,7 @@ export default function Finance() {
   const [summary, setSummary] = useState(null);
   const [accounts, setAccounts] = useState([]);
   const [transactions, setTransactions] = useState([]);
+  const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAccountDialog, setShowAccountDialog] = useState(false);
   const [showTransactionDialog, setShowTransactionDialog] = useState(false);
@@ -43,8 +44,11 @@ export default function Finance() {
     description: '',
     fromAccount: '',
     toAccount: '',
+    staffId: '',
     transactionDate: new Date().toISOString().split('T')[0]
   });
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   useEffect(() => {
     fetchData();
@@ -57,6 +61,15 @@ export default function Finance() {
         financeAPI.getAccounts(),
         financeAPI.getTransactions({ limit: 10 })
       ]);
+      
+      // Fetch staff separately to avoid breaking other calls
+      try {
+        const staffRes = await staffAPI.getAll({ limit: 100 });
+        setStaff(staffRes.data.staff || []);
+      } catch (error) {
+        console.error('Error fetching staff:', error);
+        setStaff([]);
+      }
       
       setSummary(summaryRes.data);
       setAccounts(accountsRes.data);
@@ -312,12 +325,12 @@ export default function Finance() {
                                     </select>
                                   </div>
                                   <div className="col-span-2">
-                                    <Label htmlFor="description">Description</Label>
+                                    <Label htmlFor="description">Description {newTransaction.category === 'other' && <span className="text-red-500">*</span>}</Label>
                                     <Input
                                       id="description"
                                       value={newTransaction.description}
                                       onChange={(e) => setNewTransaction(prev => ({ ...prev, description: e.target.value }))}
-                                      required
+                                      required={newTransaction.category === 'other'}
                                     />
                                   </div>
                                 </div>
@@ -331,7 +344,7 @@ export default function Finance() {
                                       id="category"
                                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                                       value={newTransaction.category}
-                                      onChange={(e) => setNewTransaction(prev => ({ ...prev, category: e.target.value }))}
+                                      onChange={(e) => setNewTransaction(prev => ({ ...prev, category: e.target.value, staffId: '', amount: '' }))}
                                       required
                                     >
                                       <option value="salary">Salary</option>
@@ -342,15 +355,56 @@ export default function Finance() {
                                       <option value="other">Other</option>
                                     </select>
                                   </div>
+                                  {newTransaction.category === 'salary' && (
+                                    <div>
+                                      <Label htmlFor="staffId">Staff Member</Label>
+                                      <select
+                                        id="staffId"
+                                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                        value={newTransaction.staffId}
+                                        onChange={(e) => {
+                                          const selectedStaff = staff.find(s => s.staffId === e.target.value);
+                                          setNewTransaction(prev => ({ 
+                                            ...prev, 
+                                            staffId: e.target.value,
+                                            amount: selectedStaff ? selectedStaff.salary.toString() : ''
+                                          }));
+                                        }}
+                                        required
+                                      >
+                                        <option value="">Select staff member</option>
+                                        {staff.map(member => (
+                                          <option key={member.staffId} value={member.staffId}>
+                                            {member.name} - ₹{member.salary.toLocaleString()}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                  )}
                                   <div>
                                     <Label htmlFor="amount">Amount</Label>
                                     <Input
                                       id="amount"
                                       type="number"
                                       value={newTransaction.amount}
-                                      onChange={(e) => setNewTransaction(prev => ({ ...prev, amount: e.target.value }))}
+                                      onChange={(e) => {
+                                        if (newTransaction.category === 'salary' && newTransaction.staffId) {
+                                          const selectedStaff = staff.find(s => s.staffId === newTransaction.staffId);
+                                          const staffSalary = selectedStaff ? selectedStaff.salary : 0;
+                                          const enteredAmount = parseFloat(e.target.value) || 0;
+                                          if (enteredAmount % staffSalary !== 0) {
+                                            return;
+                                          }
+                                        }
+                                        setNewTransaction(prev => ({ ...prev, amount: e.target.value }));
+                                      }}
                                       required
                                     />
+                                    {newTransaction.category === 'salary' && newTransaction.staffId && (
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        Amount must be multiple of staff salary
+                                      </p>
+                                    )}
                                   </div>
                                   <div>
                                     <Label htmlFor="transactionDate">Date</Label>
@@ -380,12 +434,12 @@ export default function Finance() {
                                     </select>
                                   </div>
                                   <div className="col-span-2">
-                                    <Label htmlFor="description">Description</Label>
+                                    <Label htmlFor="description">Description {newTransaction.category === 'other' && <span className="text-red-500">*</span>}</Label>
                                     <Input
                                       id="description"
                                       value={newTransaction.description}
                                       onChange={(e) => setNewTransaction(prev => ({ ...prev, description: e.target.value }))}
-                                      required
+                                      required={newTransaction.category === 'other'}
                                     />
                                   </div>
                                 </div>
@@ -453,7 +507,6 @@ export default function Finance() {
                                       id="description"
                                       value={newTransaction.description}
                                       onChange={(e) => setNewTransaction(prev => ({ ...prev, description: e.target.value }))}
-                                      required
                                     />
                                   </div>
                                 </div>
@@ -483,7 +536,7 @@ export default function Finance() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {transactions.map((transaction) => (
+                      {transactions.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((transaction) => (
                         <TableRow key={transaction.transactionId}>
                           <TableCell>{new Date(transaction.transactionDate).toLocaleDateString()}</TableCell>
                           <TableCell>
@@ -507,6 +560,27 @@ export default function Finance() {
                       ))}
                     </TableBody>
                   </Table>
+                  {/* Pagination */}
+                  <div className="flex items-center justify-between mt-4">
+                    <p className="text-sm text-muted-foreground">
+                      Showing {Math.min(transactions.length, itemsPerPage)} of {transactions.length} transactions
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm" onClick={() => setCurrentPage(1)} disabled={currentPage === 1}>
+                        First
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => prev - 1)} disabled={currentPage === 1}>
+                        Previous
+                      </Button>
+                      <span className="text-sm px-3">Page {currentPage} of {Math.ceil(transactions.length / itemsPerPage)}</span>
+                      <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => prev + 1)} disabled={currentPage >= Math.ceil(transactions.length / itemsPerPage)}>
+                        Next
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => setCurrentPage(Math.ceil(transactions.length / itemsPerPage))} disabled={currentPage >= Math.ceil(transactions.length / itemsPerPage)}>
+                        Last
+                      </Button>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>

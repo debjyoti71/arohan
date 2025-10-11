@@ -5,6 +5,7 @@ const User = require('../models/User');
 const Class = require('../models/Class');
 const StaffTransaction = require('../models/StaffTransaction');
 const { authenticateToken, authorize } = require('../middleware/auth');
+const salaryConfig = require('../../config/salary');
 
 const router = express.Router();
 
@@ -54,11 +55,29 @@ router.get('/', authenticateToken, authorize(['staff:read']), async (req, res) =
       Staff.countDocuments(filter)
     ]);
 
+    // Get current salary period
+    const currentPeriod = salaryConfig.getCurrentSalaryPeriod();
+    
+    // Check salary status for each staff member
+    const staffWithSalaryStatus = await Promise.all(
+      staff.map(async (s) => {
+        const salaryTransaction = await StaffTransaction.findOne({
+          staffId: s._id,
+          month: currentPeriod.month,
+          year: currentPeriod.year,
+          transactionType: 'salary'
+        });
+        
+        return {
+          ...s.toObject(),
+          staffId: s._id,
+          salaryStatus: salaryTransaction ? 'paid' : 'unpaid'
+        };
+      })
+    );
+
     res.json({
-      staff: staff.map(s => ({
-        ...s.toObject(),
-        staffId: s._id
-      })),
+      staff: staffWithSalaryStatus,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -202,6 +221,39 @@ router.get('/:id/transactions', authenticateToken, authorize(['staff:read']), as
     });
   } catch (error) {
     console.error('Get staff transactions error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get all staff transactions
+router.get('/transactions', authenticateToken, authorize(['staff:read']), async (req, res) => {
+  try {
+    const { page = 1, limit = 50 } = req.query;
+    const skip = (page - 1) * limit;
+
+    const [transactions, total] = await Promise.all([
+      StaffTransaction.find({})
+        .populate('staffId')
+        .skip(parseInt(skip))
+        .limit(parseInt(limit))
+        .sort({ year: -1, month: -1, paymentDate: -1 }),
+      StaffTransaction.countDocuments({})
+    ]);
+
+    res.json({
+      transactions: transactions.map(t => ({
+        ...t.toObject(),
+        transactionId: t._id
+      })),
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Get all staff transactions error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

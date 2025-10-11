@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
-import { staffAPI } from '@/lib/api';
+import { staffAPI, financeAPI } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { Plus, Search, Edit, Trash2, DollarSign, Calendar, MoreVertical } from 'lucide-react';
 
@@ -34,6 +34,10 @@ export default function Staff() {
   });
   const [editingStaff, setEditingStaff] = useState(null);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [transactions, setTransactions] = useState([]);
+  const [transactionLoading, setTransactionLoading] = useState(false);
+  const [transactionPage, setTransactionPage] = useState(1);
+  const itemsPerPage = 10;
 
   useEffect(() => {
     fetchStaff();
@@ -55,6 +59,19 @@ export default function Staff() {
       console.error('Error fetching staff:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTransactions = async () => {
+    setTransactionLoading(true);
+    try {
+      const response = await financeAPI.getTransactions({ category: 'salary', type: 'expense', limit: 100 });
+      setTransactions(response.data.transactions || []);
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+      setTransactions([]);
+    } finally {
+      setTransactionLoading(false);
     }
   };
 
@@ -314,7 +331,11 @@ export default function Staff() {
             </DialogContent>
           </Dialog>
 
-          <Tabs defaultValue="staff" className="w-full">
+          <Tabs defaultValue="staff" className="w-full" onValueChange={(value) => {
+            if (value === 'transactions') {
+              fetchTransactions();
+            }
+          }}>
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="staff">Staff Management</TabsTrigger>
               <TabsTrigger value="transactions">Transaction History</TabsTrigger>
@@ -359,7 +380,7 @@ export default function Staff() {
                         <TableHead>Join Date</TableHead>
                         <TableHead>Salary</TableHead>
                         <TableHead>Contact</TableHead>
-                        <TableHead>Status</TableHead>
+                        <TableHead>Salary Status</TableHead>
                         <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -382,10 +403,10 @@ export default function Staff() {
                           <TableCell>{member.contact}</TableCell>
                           <TableCell>
                             <span className={`px-2 py-1 rounded-full text-xs ${
-                              member.status === 'active' ? 'bg-green-100 text-green-800' :
-                              'bg-gray-100 text-gray-800'
+                              member.salaryStatus === 'paid' ? 'bg-green-100 text-green-800' :
+                              'bg-red-100 text-red-800'
                             }`}>
-                              {member.status}
+                              {member.salaryStatus || 'unpaid'}
                             </span>
                           </TableCell>
                           <TableCell>
@@ -431,12 +452,20 @@ export default function Staff() {
                       <Button
                         variant="outline"
                         size="sm"
+                        onClick={() => setPagination(prev => ({ ...prev, page: 1 }))}
+                        disabled={pagination.page <= 1}
+                      >
+                        First
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
                         disabled={pagination.page <= 1}
                       >
                         Previous
                       </Button>
-                      <span className="text-sm">
+                      <span className="text-sm px-3">
                         Page {pagination.page} of {pagination.pages}
                       </span>
                       <Button
@@ -446,6 +475,14 @@ export default function Staff() {
                         disabled={pagination.page >= pagination.pages}
                       >
                         Next
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPagination(prev => ({ ...prev, page: pagination.pages }))}
+                        disabled={pagination.page >= pagination.pages}
+                      >
+                        Last
                       </Button>
                     </div>
                   </div>
@@ -462,9 +499,66 @@ export default function Staff() {
                   <p className="text-sm text-muted-foreground">View salary distribution history for all staff members</p>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-center py-8 text-muted-foreground">
-                    Transaction history feature will be implemented here
-                  </div>
+                  {transactionLoading ? (
+                    <div className="text-center py-8">Loading transactions...</div>
+                  ) : (
+                    <>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Amount</TableHead>
+                            <TableHead>Category</TableHead>
+                            <TableHead>From Account</TableHead>
+                            <TableHead>Description</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {transactions.slice((transactionPage - 1) * itemsPerPage, transactionPage * itemsPerPage).map((transaction) => (
+                            <TableRow key={transaction.transactionId}>
+                              <TableCell>{new Date(transaction.transactionDate).toLocaleDateString()}</TableCell>
+                              <TableCell>₹{transaction.amount.toLocaleString()}</TableCell>
+                              <TableCell>
+                                <span className="px-2 py-1 rounded-full text-xs bg-red-100 text-red-800">
+                                  {transaction.category}
+                                </span>
+                              </TableCell>
+                              <TableCell>{transaction.fromAccount?.name || 'N/A'}</TableCell>
+                              <TableCell>{transaction.description}</TableCell>
+                            </TableRow>
+                          ))}
+                          {transactions.length === 0 && (
+                            <TableRow>
+                              <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                                No salary transactions found
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                      {/* Pagination */}
+                      <div className="flex items-center justify-between mt-4">
+                        <p className="text-sm text-muted-foreground">
+                          Showing {Math.min(transactions.length, itemsPerPage)} of {transactions.length} transactions
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <Button variant="outline" size="sm" onClick={() => setTransactionPage(1)} disabled={transactionPage === 1}>
+                            First
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => setTransactionPage(prev => prev - 1)} disabled={transactionPage === 1}>
+                            Previous
+                          </Button>
+                          <span className="text-sm px-3">Page {transactionPage} of {Math.ceil(transactions.length / itemsPerPage)}</span>
+                          <Button variant="outline" size="sm" onClick={() => setTransactionPage(prev => prev + 1)} disabled={transactionPage >= Math.ceil(transactions.length / itemsPerPage)}>
+                            Next
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => setTransactionPage(Math.ceil(transactions.length / itemsPerPage))} disabled={transactionPage >= Math.ceil(transactions.length / itemsPerPage)}>
+                            Last
+                          </Button>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

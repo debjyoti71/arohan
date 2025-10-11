@@ -25,6 +25,18 @@ const classFeeStructureSchema = Joi.object({
   active: Joi.boolean().optional()
 });
 
+const paymentSchema = Joi.object({
+  payments: Joi.array().items(
+    Joi.object({
+      feeRecordId: Joi.string().required(),
+      amountPaid: Joi.number().positive().required(),
+      discount: Joi.number().min(0).optional(),
+      discountRemarks: Joi.string().allow('').optional(),
+      paymentMethod: Joi.string().valid('cash', 'card', 'upi', 'cheque', 'bank_transfer').optional()
+    })
+  ).required()
+});
+
 // Fee Types Management
 router.get('/types', authenticateToken, authorize(['fees:read']), async (req, res) => {
   try {
@@ -118,8 +130,8 @@ router.get('/class-structure', authenticateToken, authorize(['fees:read']), asyn
     res.json(classFeeStructure.map(cfs => ({
       ...cfs.toObject(),
       classFeeId: cfs._id,
-      class: { ...cfs.classId.toObject(), classId: cfs.classId._id },
-      feeType: { ...cfs.feeTypeId.toObject(), feeTypeId: cfs.feeTypeId._id }
+      class: cfs.classId ? { ...cfs.classId.toObject(), classId: cfs.classId._id } : null,
+      feeType: cfs.feeTypeId ? { ...cfs.feeTypeId.toObject(), feeTypeId: cfs.feeTypeId._id } : null
     })));
   } catch (error) {
     console.error('Get class fee structure error:', error);
@@ -140,8 +152,8 @@ router.post('/class-structure', authenticateToken, authorize(['fees:create']), a
     res.status(201).json({
       ...classFeeStructure.toObject(),
       classFeeId: classFeeStructure._id,
-      class: { ...classFeeStructure.classId.toObject(), classId: classFeeStructure.classId._id },
-      feeType: { ...classFeeStructure.feeTypeId.toObject(), feeTypeId: classFeeStructure.feeTypeId._id }
+      class: classFeeStructure.classId ? { ...classFeeStructure.classId.toObject(), classId: classFeeStructure.classId._id } : null,
+      feeType: classFeeStructure.feeTypeId ? { ...classFeeStructure.feeTypeId.toObject(), feeTypeId: classFeeStructure.feeTypeId._id } : null
     });
   } catch (error) {
     console.error('Create class fee structure error:', error);
@@ -178,8 +190,8 @@ router.get('/class/:classId/structure', authenticateToken, authorize(['fees:read
 
     res.json(classFeeStructure.map(cfs => ({
       ...cfs.toObject(),
-      feeTypeId: cfs.feeTypeId._id,
-      feeType: { ...cfs.feeTypeId.toObject(), feeTypeId: cfs.feeTypeId._id }
+      feeTypeId: cfs.feeTypeId ? cfs.feeTypeId._id : null,
+      feeType: cfs.feeTypeId ? { ...cfs.feeTypeId.toObject(), feeTypeId: cfs.feeTypeId._id } : null
     })));
   } catch (error) {
     console.error('Get class fee structure error:', error);
@@ -190,44 +202,191 @@ router.get('/class/:classId/structure', authenticateToken, authorize(['fees:read
 // Get due fees summary
 router.get('/due-summary', authenticateToken, authorize(['fees:read']), async (req, res) => {
   try {
-    const dueFees = await StudentFeeRecord.find({
-      status: { $in: ['unpaid', 'partial'] }
-    })
-    .populate({
-      path: 'studentId',
-      populate: { path: 'classId' }
-    })
-    .populate('feeTypeId')
-    .sort({ dueDate: 1, 'studentId.name': 1 });
-
-    const summary = dueFees.reduce((acc, record) => {
-      const outstanding = record.amountDue - record.amountPaid;
-      acc.totalOutstanding += outstanding;
-      acc.recordCount += 1;
-      return acc;
-    }, { totalOutstanding: 0, recordCount: 0 });
-
-    res.json({
-      dueFees: dueFees.map(record => ({
-        ...record.toObject(),
-        feeRecordId: record._id,
-        student: {
-          ...record.studentId.toObject(),
-          studentId: record.studentId._id,
-          class: {
-            ...record.studentId.classId.toObject(),
-            classId: record.studentId.classId._id
-          }
-        },
-        feeType: {
-          ...record.feeTypeId.toObject(),
-          feeTypeId: record.feeTypeId._id
+    const pipeline = [
+      {
+        $match: {
+          status: { $in: ['unpaid', 'partial'] }
         }
-      })),
-      summary
-    });
+      },
+      {
+        $group: {
+          _id: '$studentId',
+          totalDue: {
+            $sum: { $subtract: ['$amountDue', '$amountPaid'] }
+          }
+        }
+      },
+      {
+        $lookup: {
+          from: 'students',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'student'
+        }
+      },
+      {
+        $unwind: '$student'
+      },
+      {
+        $project: {
+          studentId: '$_id',
+          name: '$student.name',
+          admissionNo: '$student.admissionNo',
+          guardianName: '$student.guardianName',
+          guardianContact: '$student.guardianContact',
+          totalDue: 1
+        }
+      },
+      {
+        $sort: { totalDue: -1 }
+      }
+    ];
+
+    const dueStudents = await StudentFeeRecord.aggregate(pipeline);
+    res.json(dueStudents);
   } catch (error) {
     console.error('Get due fees summary error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get fee records
+router.get('/records', authenticateToken, authorize(['fees:read']), async (req, res) => {
+  try {
+    const { studentId, status, page = 1, limit = 50 } = req.query;
+    const skip = (page - 1) * limit;
+
+    const filter = {};
+    if (studentId) filter.studentId = studentId;
+    if (status) filter.status = status;
+
+    const records = await StudentFeeRecord.find(filter)
+      .populate('studentId')
+      .populate('feeTypeId')
+      .skip(parseInt(skip))
+      .limit(parseInt(limit))
+      .sort({ dueDate: -1 });
+
+    const total = await StudentFeeRecord.countDocuments(filter);
+
+    res.json({
+      records: records.map(record => ({
+        ...record.toObject(),
+        dueAmount: record.amountDue - record.amountPaid,
+        student: record.studentId ? {
+          ...record.studentId.toObject(),
+          studentId: record.studentId._id
+        } : null,
+        feeType: record.feeTypeId ? {
+          ...record.feeTypeId.toObject(),
+          feeTypeId: record.feeTypeId._id
+        } : null
+      })),
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Get fee records error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Generate fees for students
+router.post('/generate', authenticateToken, authorize(['fees:create']), async (req, res) => {
+  try {
+    const { month, year, classIds = [] } = req.body;
+    
+    // Get classes to generate fees for
+    const classFilter = classIds.length > 0 ? { _id: { $in: classIds } } : {};
+    const classes = await Class.find(classFilter);
+    
+    let generatedCount = 0;
+    
+    for (const classObj of classes) {
+      // Get students in this class
+      const students = await Student.find({ classId: classObj._id });
+      
+      // Get fee structures for this class
+      const feeStructures = await ClassFeeStructure.find({ 
+        classId: classObj._id, 
+        active: true 
+      }).populate('feeTypeId');
+      
+      for (const student of students) {
+        for (const structure of feeStructures) {
+          // Check if record already exists
+          const existingRecord = await StudentFeeRecord.findOne({
+            studentId: student._id,
+            feeTypeId: structure.feeTypeId._id,
+            month,
+            year
+          });
+          
+          if (!existingRecord) {
+            await StudentFeeRecord.create({
+              studentId: student._id,
+              feeTypeId: structure.feeTypeId._id,
+              month,
+              year,
+              amountDue: structure.amount,
+              amountPaid: 0,
+              status: 'unpaid',
+              dueDate: new Date(year, month - 1, 5) // 5th of the month
+            });
+            generatedCount++;
+          }
+        }
+      }
+    }
+    
+    res.json({ 
+      message: `Generated ${generatedCount} fee records successfully`,
+      count: generatedCount 
+    });
+  } catch (error) {
+    console.error('Generate fees error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Record payment
+router.post('/payment', authenticateToken, authorize(['fees:create']), async (req, res) => {
+  try {
+    const { payments } = req.body;
+    
+    for (const payment of payments) {
+      const { feeRecordId, amountPaid, discount = 0, discountRemarks = '', paymentMethod = 'cash' } = payment;
+      
+      const feeRecord = await StudentFeeRecord.findById(feeRecordId);
+      if (!feeRecord) {
+        return res.status(404).json({ error: `Fee record ${feeRecordId} not found` });
+      }
+
+      // Validate discount remarks
+      if (discount > 0 && !discountRemarks.trim()) {
+        return res.status(400).json({ error: 'Discount remarks are required when discount is applied' });
+      }
+
+      const newAmountPaid = feeRecord.amountPaid + amountPaid;
+      const status = newAmountPaid >= feeRecord.amountDue ? 'paid' : 'partial';
+
+      await StudentFeeRecord.findByIdAndUpdate(feeRecordId, {
+        amountPaid: newAmountPaid,
+        status,
+        discount: (feeRecord.discount || 0) + discount,
+        discountRemarks: discountRemarks || feeRecord.discountRemarks,
+        paymentMethod,
+        lastPaymentDate: new Date()
+      });
+    }
+
+    res.json({ message: 'Payment recorded successfully' });
+  } catch (error) {
+    console.error('Record payment error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

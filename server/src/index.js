@@ -3,6 +3,9 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const connectDB = require('./utils/database');
+const { initSalaryScheduler } = require('./utils/salaryScheduler');
+const FeeScheduler = require('./utils/feeScheduler');
+const AutoFeeGenerator = require('./utils/autoFeeGenerator');
 require('dotenv').config();
 
 // Connect to MongoDB
@@ -16,6 +19,7 @@ const userRoutes = require('./routes/users');
 const feeRoutes = require('./routes/fees');
 const dashboardRoutes = require('./routes/dashboard');
 const financeRoutes = require('./routes/finance');
+const uploadRoutes = require('./routes/upload');
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -47,6 +51,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/fees', feeRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/finance', financeRoutes);
+app.use('/api/upload', uploadRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -66,6 +71,11 @@ app.use((err, req, res, next) => {
 app.use('*', (req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
+
+// Initialize schedulers
+initSalaryScheduler();
+FeeScheduler.start();
+AutoFeeGenerator.start();
 
 app.listen(PORT, () => {
   console.log(`🚀 Arohan School Management System API running on port ${PORT}`);
