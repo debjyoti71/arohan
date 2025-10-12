@@ -107,7 +107,7 @@ export default function FeeCollection() {
       if (field === 'payingAmount' || field === 'discount') {
         const payingAmount = parseFloat(field === 'payingAmount' ? value : updated[feeId].payingAmount || 0);
         const discount = parseFloat(field === 'discount' ? value : updated[feeId].discount || 0);
-        updated[feeId].finalAmount = payingAmount - discount;
+        updated[feeId].finalAmount = payingAmount + discount; // Total deducted from due
       }
       
       return updated;
@@ -121,30 +121,34 @@ export default function FeeCollection() {
     }
     
     try {
-      const totalAmount = getTotalDue();
+      const totalCollected = Object.values(paymentData).reduce((sum, data) => sum + (parseFloat(data.payingAmount) || 0), 0);
       
       // Process fee payments
       const payments = Object.entries(paymentData).map(([feeTypeId, data]) => ({
         studentId: selectedStudent.studentId || selectedStudent._id,
         feeTypeId,
-        amount: data.finalAmount,
+        amount: data.finalAmount, // Total deducted (paying + discount)
         paymentMethod: 'cash',
         paymentDate: new Date().toISOString()
       }));
 
       for (const payment of payments) {
-        await feesAPI.processPaymentWithRatio(payment);
+        if (payment.amount > 0) {
+          await feesAPI.processPaymentWithRatio(payment);
+        }
       }
       
-      // Add amount to selected account
-      await financeAPI.createTransaction({
-        type: 'income',
-        category: 'fees',
-        amount: totalAmount,
-        description: `Fee collection from ${selectedStudent.name}`,
-        toAccount: selectedAccount,
-        transactionDate: new Date().toISOString()
-      });
+      // Add actual collected amount to selected account
+      if (totalCollected > 0) {
+        await financeAPI.createTransaction({
+          type: 'income',
+          category: 'fees',
+          amount: totalCollected,
+          description: `Fee collection from ${selectedStudent.name}`,
+          toAccount: selectedAccount,
+          transactionDate: new Date().toISOString()
+        });
+      }
       
       setShowPaymentDialog(false);
       setSelectedStudent(null);
@@ -170,7 +174,7 @@ export default function FeeCollection() {
       Object.keys(updated).forEach(feeId => {
         const payingAmount = parseFloat(updated[feeId].payingAmount || 0);
         const discount = parseFloat(updated[feeId].discount || 0);
-        updated[feeId].finalAmount = payingAmount - discount;
+        updated[feeId].finalAmount = payingAmount + discount; // Total deducted from due
       });
       return updated;
     });
@@ -300,7 +304,7 @@ export default function FeeCollection() {
                     <TableHead>Due Amount</TableHead>
                     <TableHead>Paying Amount</TableHead>
                     <TableHead>Discount</TableHead>
-                    <TableHead>Final Amount</TableHead>
+                    <TableHead>Total Deducted</TableHead>
                     <TableHead>Discount Remarks</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -357,6 +361,16 @@ export default function FeeCollection() {
                   <Button onClick={recalculateAmounts} variant="outline">
                     Recalculate Total
                   </Button>
+                  <Button onClick={async () => {
+                    try {
+                      await financeAPI.triggerAutoGeneration();
+                      alert('Fee generation triggered! Please refresh and try again.');
+                    } catch (error) {
+                      console.error('Error triggering fee generation:', error);
+                    }
+                  }} variant="outline">
+                    Generate Fees
+                  </Button>
                   <div className="flex items-center gap-2">
                     <Label>Add to Account:</Label>
                     <select
@@ -377,7 +391,11 @@ export default function FeeCollection() {
                 
                 <div className="flex justify-between items-center p-4 bg-muted rounded">
                   <span className="text-lg font-semibold">Total Amount to Collect:</span>
-                  <span className="text-xl font-bold text-green-600">₹{getTotalDue().toLocaleString()}</span>
+                  <span className="text-xl font-bold text-green-600">₹{Object.values(paymentData).reduce((sum, data) => sum + (parseFloat(data.payingAmount) || 0), 0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between items-center p-2 text-sm text-muted-foreground">
+                  <span>Total Deducted from Due (Including Discount):</span>
+                  <span>₹{getTotalDue().toLocaleString()}</span>
                 </div>
               </div>
             </div>

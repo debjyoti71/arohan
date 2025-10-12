@@ -118,6 +118,7 @@ export const financeAPI = {
   getTransactions: (params) => api.get('/finance/transactions', { params }),
   createTransaction: (data) => api.post('/finance/transactions', data),
   getSummary: () => api.get('/finance/summary'),
+  triggerAutoGeneration: () => api.post('/finance/trigger-auto-generation'),
 };
 
 // Upload API
