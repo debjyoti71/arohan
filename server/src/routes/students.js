@@ -22,6 +22,7 @@ const studentSchema = Joi.object({
   guardianName: Joi.string().optional(),
   guardianContact: Joi.string().optional(),
   guardianOccupation: Joi.string().allow('').optional(),
+  guardianQualification: Joi.string().allow('').optional(),
   address: Joi.string().optional(),
   profileImage: Joi.string().allow('').optional(),
   status: Joi.string().valid('active', 'inactive', 'passed', 'left').optional()

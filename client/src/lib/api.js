@@ -103,11 +103,14 @@ export const feesAPI = {
   deleteClassFeeStructure: (id) => api.delete(`/fees/class-structure/${id}`),
   getClassStructure: (classId) => api.get(`/fees/class/${classId}/structure`),
   getRecords: (params) => api.get('/fees/records', { params }),
+  getCollectionRecords: (params) => api.get('/fees/collection-records', { params }),
+  getCollectionDetails: (collectionId) => api.get(`/fees/collection-details/${collectionId}`),
   recordPayment: (data) => api.post('/fees/payment', data),
   generateFees: (data) => api.post('/fees/generate', data),
   getDueSummary: () => api.get('/fees/due-summary'),
-  getStudentFeeSummary: (studentId) => api.get(`/finance/students/${studentId}/fee-summary`),
+  getStudentFeeSummary: (studentId) => api.get(`/fees/student-summary/${studentId}`),
   processPaymentWithRatio: (data) => api.post('/finance/payment-with-ratio', data),
+  getPaymentSummaries: () => api.get('/finance/payment-summaries'),
 };
 
 // Finance API

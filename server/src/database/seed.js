@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 const connectDB = require('../utils/database');
 const Staff = require('../models/Staff');
 const User = require('../models/User');
@@ -22,7 +23,7 @@ async function seed() {
     // Create admin staff
     const adminStaff = await Staff.create({
       name: 'Administrator',
-      role: 'admin',
+      role: 'principal',
       qualification: 'Masters in Education',
       joinDate: new Date(),
       salary: 50000,

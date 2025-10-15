@@ -22,7 +22,7 @@ const financeRoutes = require('./routes/finance');
 const uploadRoutes = require('./routes/upload');
 
 const app = express();
-const PORT = process.env.PORT || 8000;
+const PORT = process.env.PORT || 5000;
 
 // Security middleware
 app.use(helmet());
@@ -37,6 +37,9 @@ const limiter = rateLimit({
   max: 1000 // limit each IP to 1000 requests per windowMs
 });
 app.use(limiter);
+
+// Receipt route (before JSON parsing to handle PDF buffer)
+app.get('/api/fees/receipt/:paymentId', require('./routes/fees').receiptHandler);
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));

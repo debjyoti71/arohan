@@ -9,7 +9,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { studentsAPI, feesAPI } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
-import { ArrowLeft, User, IndianRupee, Settings, Edit, Trash2, MoreVertical } from 'lucide-react';
+import { ArrowLeft, User, IndianRupee, Settings, Edit, Trash2, MoreVertical, Camera, Upload } from 'lucide-react';
+import { uploadAPI } from '@/lib/api';
+import CameraCapture from '@/components/CameraCapture';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
@@ -28,6 +30,10 @@ export default function StudentProfile() {
   const [feeCustomizations, setFeeCustomizations] = useState({});
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
+  const [showCamera, setShowCamera] = useState(false);
+  const [studentImage, setStudentImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     fetchStudentData();
@@ -60,12 +66,41 @@ export default function StudentProfile() {
     }
   };
 
+  const handleImageCapture = async (file) => {
+    setStudentImage(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  const uploadImage = async () => {
+    if (!studentImage) return editingStudent.profileImage || '';
+    
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append('image', studentImage);
+      const response = await uploadAPI.uploadStudentImage(formData);
+      return response.data.imageUrl;
+    } catch (error) {
+      console.error('Image upload error:', error);
+      return editingStudent.profileImage || '';
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   const handleEditStudent = async (e) => {
     e.preventDefault();
     try {
+      let imageUrl = editingStudent.profileImage || '';
+      if (studentImage) {
+        imageUrl = await uploadImage();
+      }
+      
       const { _id, studentId, class: cls, createdAt, updatedAt, __v, ...updateData } = editingStudent;
-      await studentsAPI.update(id, updateData);
+      await studentsAPI.update(id, { ...updateData, profileImage: imageUrl });
       setShowEditDialog(false);
+      setStudentImage(null);
+      setImagePreview('');
       fetchStudentData();
     } catch (error) {
       console.error('Error updating student:', error);
@@ -195,6 +230,8 @@ export default function StudentProfile() {
                       dateOfBirth: student.dateOfBirth ? new Date(student.dateOfBirth).toISOString().split('T')[0] : '',
                       dateOfAdmission: student.dateOfAdmission ? new Date(student.dateOfAdmission).toISOString().split('T')[0] : ''
                     });
+                    setImagePreview(student.profileImage || '');
+                    setStudentImage(null);
                     setShowEditDialog(true);
                   }}>
                     <Edit className="mr-2 h-4 w-4" />
@@ -228,6 +265,20 @@ export default function StudentProfile() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="flex items-center gap-4 mb-4">
+                  <img 
+                    src={student.profileImage || '/default-avatar.png'} 
+                    alt={student.name}
+                    className="w-20 h-20 rounded-full object-cover border-2 border-gray-200"
+                    onError={(e) => {
+                      e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name)}&size=80&background=random`;
+                    }}
+                  />
+                  <div>
+                    <h3 className="text-lg font-semibold">{student.name}</h3>
+                    <p className="text-sm text-muted-foreground">Admission No: {student.admissionNo}</p>
+                  </div>
+                </div>
                 <div className="grid grid-cols-1 gap-4">
                   <div>
                     <p className="text-sm text-muted-foreground">Full Name</p>
@@ -373,6 +424,41 @@ export default function StudentProfile() {
               </DialogHeader>
               {editingStudent && (
                 <form onSubmit={handleEditStudent} className="space-y-4">
+                  {/* Image Upload Section */}
+                  <div className="space-y-2">
+                    <Label>Student Photo</Label>
+                    <div className="flex items-center gap-4">
+                      {(imagePreview || editingStudent.profileImage) && (
+                        <img 
+                          src={imagePreview || editingStudent.profileImage} 
+                          alt="Preview" 
+                          className="w-20 h-20 rounded-full object-cover border" 
+                        />
+                      )}
+                      <div className="flex gap-2">
+                        <Button type="button" variant="outline" onClick={() => setShowCamera(true)}>
+                          <Camera className="mr-2 h-4 w-4" />
+                          Take Photo
+                        </Button>
+                        <div className="relative">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files[0];
+                              if (file) handleImageCapture(file);
+                            }}
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                          />
+                          <Button type="button" variant="outline">
+                            <Upload className="mr-2 h-4 w-4" />
+                            Upload Photo
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="edit-name">Student Name</Label>
@@ -444,10 +530,28 @@ export default function StudentProfile() {
                     <Button type="button" variant="outline" onClick={() => setShowEditDialog(false)}>
                       Cancel
                     </Button>
-                    <Button type="submit">Update Student</Button>
+                    <Button type="submit" disabled={uploadingImage}>
+                      {uploadingImage ? 'Uploading...' : 'Update Student'}
+                    </Button>
                   </DialogFooter>
                 </form>
               )}
+            </DialogContent>
+          </Dialog>
+          
+          {/* Camera Dialog */}
+          <Dialog open={showCamera} onOpenChange={setShowCamera}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Take Student Photo</DialogTitle>
+                <DialogDescription>
+                  Use your camera to take a photo or upload an image file.
+                </DialogDescription>
+              </DialogHeader>
+              <CameraCapture 
+                onImageCapture={handleImageCapture}
+                onClose={() => setShowCamera(false)}
+              />
             </DialogContent>
           </Dialog>
         </div>

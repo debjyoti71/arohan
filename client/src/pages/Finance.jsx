@@ -12,7 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
-import { financeAPI, staffAPI } from '@/lib/api';
+
+import { financeAPI, staffAPI, feesAPI } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { Plus, Wallet, TrendingUp, TrendingDown, ArrowRightLeft, MoreVertical, Edit, Trash2 } from 'lucide-react';
 
@@ -21,8 +22,22 @@ export default function Finance() {
   const [summary, setSummary] = useState(null);
   const [accounts, setAccounts] = useState([]);
   const [transactions, setTransactions] = useState([]);
+  const [feePayments, setFeePayments] = useState([]);
+  const [allTransactions, setAllTransactions] = useState([]);
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('income');
+  const [transactionPages, setTransactionPages] = useState({
+    income: 1,
+    expense: 1,
+    transfer: 1
+  });
+  const [categoryFilters, setCategoryFilters] = useState({
+    income: 'all',
+    expense: 'all',
+    transfer: 'all'
+  });
+  const recordsPerPage = 10;
   const [showAccountDialog, setShowAccountDialog] = useState(false);
   const [showTransactionDialog, setShowTransactionDialog] = useState(false);
   
@@ -56,10 +71,11 @@ export default function Finance() {
 
   const fetchData = async () => {
     try {
-      const [summaryRes, accountsRes, transactionsRes] = await Promise.all([
+      const [summaryRes, accountsRes, transactionsRes, feeRecordsRes] = await Promise.all([
         financeAPI.getSummary(),
         financeAPI.getAccounts(),
-        financeAPI.getTransactions({ limit: 10 })
+        financeAPI.getTransactions({ limit: 100 }),
+        feesAPI.getRecords({ limit: 100 })
       ]);
       
       // Fetch staff separately to avoid breaking other calls
@@ -73,7 +89,26 @@ export default function Finance() {
       
       setSummary(summaryRes.data);
       setAccounts(accountsRes.data);
-      setTransactions(transactionsRes.data.transactions);
+      setTransactions(transactionsRes.data.transactions || []);
+      setFeePayments(feeRecordsRes.data.records || []);
+      
+      // Combine all transactions
+      const combinedTransactions = [
+        ...transactionsRes.data.transactions.map(t => ({ ...t, source: 'transaction' })),
+        ...feeRecordsRes.data.records
+          .filter(r => r.amountPaid > 0)
+          .map(r => ({
+            transactionId: r._id,
+            type: 'income',
+            category: 'fees',
+            amount: r.amountPaid,
+            description: `Fee payment - ${r.feeType?.name || 'Fee'} - ${r.student?.name || 'Student'}`,
+            transactionDate: r.lastPaymentDate || r.createdAt,
+            source: 'fee_payment'
+          }))
+      ].sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate));
+      
+      setAllTransactions(combinedTransactions);
     } catch (error) {
       console.error('Error fetching finance data:', error);
     } finally {
@@ -235,7 +270,7 @@ export default function Finance() {
               <Card>
                 <CardHeader>
                   <div className="flex items-center justify-between">
-                    <CardTitle>Recent Transactions</CardTitle>
+                    <CardTitle>All Transactions</CardTitle>
                     {hasPermission('finance', 'create') && (
                       <Dialog open={showTransactionDialog} onOpenChange={setShowTransactionDialog}>
                         <DialogTrigger asChild>
@@ -525,62 +560,192 @@ export default function Finance() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Category</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead>Amount</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {transactions.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((transaction) => (
-                        <TableRow key={transaction.transactionId}>
-                          <TableCell>{new Date(transaction.transactionDate).toLocaleDateString()}</TableCell>
-                          <TableCell>
-                            <span className={`px-2 py-1 rounded-full text-xs ${
-                              transaction.type === 'income' ? 'bg-green-100 text-green-800' :
-                              transaction.type === 'expense' ? 'bg-red-100 text-red-800' :
-                              'bg-blue-100 text-blue-800'
-                            }`}>
-                              {transaction.type}
-                            </span>
-                          </TableCell>
-                          <TableCell>{transaction.category}</TableCell>
-                          <TableCell>{transaction.description}</TableCell>
-                          <TableCell className={
-                            transaction.type === 'income' ? 'text-green-600' :
-                            transaction.type === 'expense' ? 'text-red-600' : ''
-                          }>
-                            ₹{transaction.amount.toLocaleString()}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  {/* Pagination */}
-                  <div className="flex items-center justify-between mt-4">
-                    <p className="text-sm text-muted-foreground">
-                      Showing {Math.min(transactions.length, itemsPerPage)} of {transactions.length} transactions
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={() => setCurrentPage(1)} disabled={currentPage === 1}>
-                        First
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => prev - 1)} disabled={currentPage === 1}>
-                        Previous
-                      </Button>
-                      <span className="text-sm px-3">Page {currentPage} of {Math.ceil(transactions.length / itemsPerPage)}</span>
-                      <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => prev + 1)} disabled={currentPage >= Math.ceil(transactions.length / itemsPerPage)}>
-                        Next
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => setCurrentPage(Math.ceil(transactions.length / itemsPerPage))} disabled={currentPage >= Math.ceil(transactions.length / itemsPerPage)}>
-                        Last
-                      </Button>
-                    </div>
-                  </div>
+                  <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                    <TabsList className="grid w-full grid-cols-3">
+                      <TabsTrigger value="income" className="flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4" />
+                        Income
+                      </TabsTrigger>
+                      <TabsTrigger value="expense" className="flex items-center gap-2">
+                        <TrendingDown className="h-4 w-4" />
+                        Expense
+                      </TabsTrigger>
+                      <TabsTrigger value="transfer" className="flex items-center gap-2">
+                        <ArrowRightLeft className="h-4 w-4" />
+                        Transfer
+                      </TabsTrigger>
+                    </TabsList>
+                    
+                    {['income', 'expense', 'transfer'].map(type => {
+                      let filteredTransactions = allTransactions.filter(t => t.type === type);
+                      
+                      // Apply category filter
+                      if (categoryFilters[type] !== 'all') {
+                        filteredTransactions = filteredTransactions.filter(t => t.category === categoryFilters[type]);
+                      }
+                      
+                      const currentPage = transactionPages[type];
+                      const totalPages = Math.ceil(filteredTransactions.length / recordsPerPage);
+                      const startIndex = (currentPage - 1) * recordsPerPage;
+                      const displayTransactions = filteredTransactions.slice(startIndex, startIndex + recordsPerPage);
+                      
+                      return (
+                        <TabsContent key={type} value={type} className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-semibold capitalize">{type} Transactions</h3>
+                            <div className="flex items-center gap-4">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm">Category:</span>
+                                <select
+                                  className="flex h-8 w-32 rounded-md border border-input bg-background px-2 py-1 text-xs"
+                                  value={categoryFilters[type]}
+                                  onChange={(e) => {
+                                    setCategoryFilters(prev => ({ ...prev, [type]: e.target.value }));
+                                    setTransactionPages(prev => ({ ...prev, [type]: 1 }));
+                                  }}
+                                >
+                                  <option value="all">All Categories</option>
+                                  {type === 'income' && (
+                                    <>
+                                      <option value="fees">Fees</option>
+                                      <option value="donation">Donation</option>
+                                      <option value="investment">Investment</option>
+                                      <option value="other">Other</option>
+                                    </>
+                                  )}
+                                  {type === 'expense' && (
+                                    <>
+                                      <option value="salary">Salary</option>
+                                      <option value="maintenance">Maintenance</option>
+                                      <option value="supplies">Supplies</option>
+                                      <option value="utilities">Utilities</option>
+                                      <option value="transport">Transport</option>
+                                      <option value="other">Other</option>
+                                    </>
+                                  )}
+                                  {type === 'transfer' && (
+                                    <option value="transfer">Transfer</option>
+                                  )}
+                                </select>
+                              </div>
+                              <span className="text-sm text-muted-foreground">
+                                Total: {filteredTransactions.length} transactions
+                              </span>
+                            </div>
+                          </div>
+                          
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Date</TableHead>
+                                <TableHead>Category</TableHead>
+                                <TableHead>Description</TableHead>
+                                {type === 'transfer' && (
+                                  <>
+                                    <TableHead>From Account</TableHead>
+                                    <TableHead>To Account</TableHead>
+                                  </>
+                                )}
+                                <TableHead>Amount</TableHead>
+                                <TableHead>Source</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {displayTransactions.map((transaction, index) => (
+                                <TableRow key={`${transaction.transactionId}-${index}`}>
+                                  <TableCell>{new Date(transaction.transactionDate).toLocaleDateString()}</TableCell>
+                                  <TableCell>
+                                    <span className={`px-2 py-1 rounded-full text-xs ${
+                                      transaction.category === 'fees' ? 'bg-blue-100 text-blue-800' :
+                                      transaction.category === 'salary' ? 'bg-purple-100 text-purple-800' :
+                                      transaction.category === 'maintenance' ? 'bg-orange-100 text-orange-800' :
+                                      'bg-gray-100 text-gray-800'
+                                    }`}>
+                                      {transaction.category}
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="max-w-xs truncate">{transaction.description}</TableCell>
+                                  {type === 'transfer' && (
+                                    <>
+                                      <TableCell>{transaction.fromAccount?.name || 'N/A'}</TableCell>
+                                      <TableCell>{transaction.toAccount?.name || 'N/A'}</TableCell>
+                                    </>
+                                  )}
+                                  <TableCell className={
+                                    transaction.type === 'income' ? 'text-green-600 font-semibold' :
+                                    transaction.type === 'expense' ? 'text-red-600 font-semibold' : 'font-semibold'
+                                  }>
+                                    {transaction.type === 'expense' ? '-' : ''}₹{transaction.amount.toLocaleString()}
+                                  </TableCell>
+                                  <TableCell>
+                                    <span className={`px-2 py-1 rounded-full text-xs ${
+                                      transaction.source === 'fee_payment' ? 'bg-green-100 text-green-800' :
+                                      'bg-blue-100 text-blue-800'
+                                    }`}>
+                                      {transaction.source === 'fee_payment' ? 'Fee Payment' : 'Manual Entry'}
+                                    </span>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                              {displayTransactions.length === 0 && (
+                                <TableRow>
+                                  <TableCell colSpan={type === 'transfer' ? 7 : 5} className="text-center text-muted-foreground py-8">
+                                    No {type} transactions found
+                                  </TableCell>
+                                </TableRow>
+                              )}
+                            </TableBody>
+                          </Table>
+                          
+                          {/* Pagination */}
+                          {totalPages > 1 && (
+                            <div className="flex items-center justify-between mt-4">
+                              <p className="text-sm text-muted-foreground">
+                                Showing {startIndex + 1} to {Math.min(startIndex + recordsPerPage, filteredTransactions.length)} of {filteredTransactions.length} transactions
+                              </p>
+                              <div className="flex items-center gap-2">
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  onClick={() => setTransactionPages(prev => ({ ...prev, [type]: 1 }))}
+                                  disabled={currentPage === 1}
+                                >
+                                  First
+                                </Button>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  onClick={() => setTransactionPages(prev => ({ ...prev, [type]: prev[type] - 1 }))}
+                                  disabled={currentPage === 1}
+                                >
+                                  Previous
+                                </Button>
+                                <span className="text-sm px-3">
+                                  Page {currentPage} of {totalPages}
+                                </span>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  onClick={() => setTransactionPages(prev => ({ ...prev, [type]: prev[type] + 1 }))}
+                                  disabled={currentPage >= totalPages}
+                                >
+                                  Next
+                                </Button>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  onClick={() => setTransactionPages(prev => ({ ...prev, [type]: totalPages }))}
+                                  disabled={currentPage >= totalPages}
+                                >
+                                  Last
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </TabsContent>
+                      );
+                    })}
+                  </Tabs>
                 </CardContent>
               </Card>
             </TabsContent>

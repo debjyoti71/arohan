@@ -14,6 +14,7 @@ const studentSchema = new mongoose.Schema({
   guardianName: { type: String, maxlength: 100 },
   guardianContact: { type: String, maxlength: 15 },
   guardianOccupation: { type: String, maxlength: 100, default: '' },
+  guardianQualification: { type: String, maxlength: 100, default: '' },
   address: { type: String },
   profileImage: { type: String, default: '' },
   status: { type: String, enum: ['active', 'inactive', 'passed', 'left'], default: 'active' }

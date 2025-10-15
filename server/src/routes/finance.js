@@ -157,10 +157,19 @@ router.post('/transactions', authenticateToken, authorize(['finance:create']), a
 
     const transaction = await Transaction.create(transactionData);
 
-    // Create staff transaction for salary payments
+    // Create staff transaction for salary payments and update description
     if (transaction.category === 'salary' && transaction.staffId) {
       const StaffTransaction = require('../models/StaffTransaction');
+      const Staff = require('../models/Staff');
       const transactionDate = new Date(transaction.transactionDate);
+      
+      // Get staff name for description
+      const staff = await Staff.findById(transaction.staffId);
+      if (staff) {
+        await Transaction.findByIdAndUpdate(transaction._id, {
+          description: `Salary paid to ${staff.name}`
+        });
+      }
       
       await StaffTransaction.create({
         staffId: transaction.staffId,
@@ -366,6 +375,25 @@ router.post('/trigger-auto-generation', authenticateToken, authorize(['finance:c
     res.json({ success: true, message: 'Auto fee generation triggered successfully' });
   } catch (error) {
     console.error('Trigger auto generation error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get fee payment summaries for all students
+router.get('/payment-summaries', authenticateToken, authorize(['fees:read']), async (req, res) => {
+  try {
+    const FeePaymentSummary = require('../models/FeePaymentSummary');
+    const summaries = await FeePaymentSummary.find({})
+      .populate('studentId')
+      .populate('feeTypeId');
+    
+    res.json(summaries.map(s => ({
+      ...s.toObject(),
+      student: s.studentId ? { ...s.studentId.toObject(), studentId: s.studentId._id } : null,
+      feeType: s.feeTypeId ? { ...s.feeTypeId.toObject(), feeTypeId: s.feeTypeId._id } : null
+    })));
+  } catch (error) {
+    console.error('Get payment summaries error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

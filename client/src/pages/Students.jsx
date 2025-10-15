@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { studentsAPI, classesAPI, feesAPI, uploadAPI } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { Plus, Search, Eye, Trash2, ChevronLeft, ChevronRight, Camera, Upload } from 'lucide-react';
+import { toast } from 'sonner';
+import { Spinner } from '@/components/ui/spinner';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 // import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -39,6 +41,7 @@ export default function Students() {
     guardianName: '',
     guardianContact: '',
     guardianOccupation: '',
+    guardianQualification: '',
     address: '',
     profileImage: ''
   });
@@ -53,6 +56,7 @@ export default function Students() {
   const [studentImage, setStudentImage] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [addingStudent, setAddingStudent] = useState(false);
 
   useEffect(() => {
     fetchStudents();
@@ -151,6 +155,7 @@ export default function Students() {
   };
 
   const handleAddStudent = async () => {
+    setAddingStudent(true);
     try {
       let imageUrl = '';
       if (studentImage) {
@@ -166,14 +171,26 @@ export default function Students() {
       
       // Update fee structure if customizations exist
       if (Object.keys(feeCustomizations).length > 0) {
-        const customizations = Object.entries(feeCustomizations).map(([feeTypeId, data]) => ({
-          feeTypeId: feeTypeId,
-          ...data,
-          customAmount: parseFloat(data.customAmount)
-        }));
+        const customizations = Object.entries(feeCustomizations)
+          .filter(([feeTypeId, data]) => data.isApplicable !== false)
+          .map(([feeTypeId, data]) => ({
+            feeTypeId: feeTypeId,
+            customAmount: parseFloat(data.customAmount || 0),
+            isApplicable: data.isApplicable !== false,
+            remarks: data.remarks || ''
+          }));
         
-        await studentsAPI.updateFeeStructure(response.data.studentId, { customizations });
+        if (customizations.length > 0) {
+          await studentsAPI.updateFeeStructure(response.data.studentId, { customizations });
+        }
       }
+      
+      // Generate fee records for current month
+      const currentDate = new Date();
+      await feesAPI.generateFees({ 
+        month: currentDate.getMonth() + 1, 
+        year: currentDate.getFullYear() 
+      });
       
       setShowAddDialog(false);
       setCurrentStep(1);
@@ -190,6 +207,7 @@ export default function Students() {
         guardianName: '',
         guardianContact: '',
         guardianOccupation: '',
+        guardianQualification: '',
         address: '',
         profileImage: ''
       });
@@ -200,7 +218,12 @@ export default function Students() {
       fetchStudents();
     } catch (error) {
       console.error('Error adding student:', error);
-      alert(error.response?.data?.error || 'Error adding student');
+      console.error('Error response:', error.response?.data);
+      toast.error('Failed to add student', {
+        description: error.response?.data?.error || 'An error occurred while adding the student.'
+      });
+    } finally {
+      setAddingStudent(false);
     }
   };
 
@@ -423,6 +446,14 @@ export default function Students() {
                               onChange={(e) => setNewStudent(prev => ({ ...prev, guardianOccupation: e.target.value }))}
                             />
                           </div>
+                          <div>
+                            <Label htmlFor="guardianQualification">Guardian Qualification (Optional)</Label>
+                            <Input
+                              id="guardianQualification"
+                              value={newStudent.guardianQualification || ''}
+                              onChange={(e) => setNewStudent(prev => ({ ...prev, guardianQualification: e.target.value }))}
+                            />
+                          </div>
                           <div className="col-span-2">
                             <Label htmlFor="address">Address</Label>
                             <Input
@@ -472,13 +503,18 @@ export default function Students() {
                                   />
                                 </TableCell>
                                 <TableCell>
-                                  <Input
-                                    value={feeCustomizations[fee.feeTypeId]?.remarks || ''}
-                                    onChange={(e) => handleFeeCustomizationChange(fee.feeTypeId, 'remarks', e.target.value)}
-                                    placeholder={parseFloat(feeCustomizations[fee.feeTypeId]?.customAmount || fee.amount) !== fee.amount ? "Remarks required" : "Optional remarks"}
-                                    required={parseFloat(feeCustomizations[fee.feeTypeId]?.customAmount || fee.amount) !== fee.amount}
-                                    className="w-32"
-                                  />
+                                  <div className="relative">
+                                    <Input
+                                      value={feeCustomizations[fee.feeTypeId]?.remarks || ''}
+                                      onChange={(e) => handleFeeCustomizationChange(fee.feeTypeId, 'remarks', e.target.value)}
+                                      placeholder={parseFloat(feeCustomizations[fee.feeTypeId]?.customAmount || fee.amount) !== fee.amount ? "Required" : "Optional"}
+                                      required={parseFloat(feeCustomizations[fee.feeTypeId]?.customAmount || fee.amount) !== fee.amount}
+                                      className={`w-32 ${parseFloat(feeCustomizations[fee.feeTypeId]?.customAmount || fee.amount) !== fee.amount ? 'border-blue-300 bg-blue-50' : ''}`}
+                                    />
+                                    {parseFloat(feeCustomizations[fee.feeTypeId]?.customAmount || fee.amount) !== fee.amount && (
+                                      <span className="absolute -top-1 -right-1 text-blue-500 text-xs font-bold">*</span>
+                                    )}
+                                  </div>
                                 </TableCell>
                               </TableRow>
                             ))}
@@ -505,11 +541,15 @@ export default function Students() {
                             type="button" 
                             onClick={() => {
                               if (currentStep === 1 && (!newStudent.name || !newStudent.admissionNo)) {
-                                alert('Please fill required fields');
+                                toast.warning('Required fields missing', {
+                                  description: 'Please fill in student name and admission number to continue.'
+                                });
                                 return;
                               }
                               if (currentStep === 2 && !newStudent.classId) {
-                                alert('Please select a class');
+                                toast.warning('Class selection required', {
+                                  description: 'Please select a class for the student to continue.'
+                                });
                                 return;
                               }
                               setCurrentStep(prev => prev + 1);
@@ -519,8 +559,24 @@ export default function Students() {
                             <ChevronRight className="ml-2 h-4 w-4" />
                           </Button>
                         ) : (
-                          <Button type="button" onClick={handleAddStudent} disabled={uploadingImage}>
-                            {uploadingImage ? 'Uploading...' : 'Add Student'}
+                          <Button 
+                            type="button" 
+                            onClick={handleAddStudent} 
+                            disabled={uploadingImage || addingStudent || Object.entries(feeCustomizations).some(([feeTypeId, data]) => {
+                              const fee = selectedClassFees.find(f => f.feeTypeId === feeTypeId);
+                              return fee && parseFloat(data.customAmount || fee.amount) !== fee.amount && (!data.remarks || !data.remarks.trim());
+                            })}
+                          >
+                            {addingStudent ? (
+                              <>
+                                <Spinner className="mr-2 h-4 w-4" />
+                                Adding Student...
+                              </>
+                            ) : uploadingImage ? (
+                              'Uploading...'
+                            ) : (
+                              'Add Student'
+                            )}
                           </Button>
                         )}
                       </div>

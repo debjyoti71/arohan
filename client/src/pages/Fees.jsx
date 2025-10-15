@@ -13,19 +13,19 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Label } from "@/components/ui/label";
 import { feesAPI, classesAPI } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
-import { Plus, Search, IndianRupee, AlertCircle, Edit, Trash2, MoreVertical } from 'lucide-react';
+import { Plus, Search, IndianRupee, AlertCircle, Edit, Trash2, MoreVertical, Eye } from 'lucide-react';
 
 export default function Fees() {
   const { hasPermission } = useAuth();
-  const [activeTab, setActiveTab] = useState('class-fees');
   const [classes, setClasses] = useState([]);
   const [classFeeStructures, setClassFeeStructures] = useState([]);
-  const [feeRecords, setFeeRecords] = useState([]);
-  const [dueSummary, setDueSummary] = useState(null);
+  const [collectionRecords, setCollectionRecords] = useState([]);
+  const [collectionDetails, setCollectionDetails] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('structures');
 
   const [showAddFeeDialog, setShowAddFeeDialog] = useState(false);
-
+  const [showDetailsDialog, setShowDetailsDialog] = useState(false);
 
   const [newFee, setNewFee] = useState({
     classId: '',
@@ -38,21 +38,20 @@ export default function Fees() {
   const [showEditFeeDialog, setShowEditFeeDialog] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
+  const [collectionPage, setCollectionPage] = useState(1);
   const itemsPerPage = 10;
 
   useEffect(() => {
     fetchInitialData();
-  }, []);
+    if (activeTab === 'collections') {
+      fetchCollectionRecords();
+    }
+  }, [activeTab]);
 
   const fetchInitialData = async () => {
     try {
-      const [classesRes, dueSummaryRes] = await Promise.all([
-        classesAPI.getAll(),
-        feesAPI.getDueSummary()
-      ]);
-      
+      const classesRes = await classesAPI.getAll();
       setClasses(classesRes.data);
-      setDueSummary(dueSummaryRes.data);
       fetchClassFeeStructures();
     } catch (error) {
       console.error('Error fetching initial data:', error);
@@ -70,14 +69,26 @@ export default function Fees() {
     }
   };
 
-  const fetchFeeRecords = async () => {
+  const fetchCollectionRecords = async () => {
     try {
-      const response = await feesAPI.getRecords({ limit: 50 });
-      setFeeRecords(response.data.records || []);
+      const response = await feesAPI.getCollectionRecords({ page: collectionPage, limit: itemsPerPage });
+      setCollectionRecords(response.data.collections || []);
     } catch (error) {
-      console.error('Error fetching fee records:', error);
+      console.error('Error fetching collection records:', error);
     }
   };
+
+  const handleViewDetails = async (collectionId) => {
+    try {
+      const response = await feesAPI.getCollectionDetails(collectionId);
+      setCollectionDetails(response.data);
+      setShowDetailsDialog(true);
+    } catch (error) {
+      console.error('Error fetching collection details:', error);
+    }
+  };
+
+
 
 
 
@@ -355,57 +366,86 @@ export default function Fees() {
             </div>
           </div>
 
-          {/* Outstanding Fees Alert */}
-          {dueSummary && dueSummary.length > 0 && (
-            <Card className="border-orange-200 bg-orange-50">
-              <CardHeader className="flex flex-row items-center gap-2">
-                <AlertCircle className="h-5 w-5 text-orange-600" />
-                <CardTitle className="text-orange-800">Outstanding Fees Alert</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-orange-700">
-                  {dueSummary.length} students have outstanding fees totaling ₹{dueSummary.reduce((sum, student) => sum + student.totalDue, 0).toLocaleString()}.
-                </p>
-              </CardContent>
-            </Card>
-          )}
+          {/* Collection Details Dialog */}
+          <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Fee Collection Details</DialogTitle>
+                <DialogDescription>Breakdown of fees paid in this collection</DialogDescription>
+              </DialogHeader>
+              {collectionDetails && (
+                <div className="space-y-4">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Fee Type</TableHead>
+                        <TableHead>Month/Year</TableHead>
+                        <TableHead>Amount Due</TableHead>
+                        <TableHead>Amount Paid</TableHead>
+                        <TableHead>Discount</TableHead>
+                        <TableHead>Discount Remarks</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {collectionDetails.details.map((detail, index) => (
+                        <TableRow key={index}>
+                          <TableCell className="font-medium">{detail.feeType}</TableCell>
+                          <TableCell>{detail.month}/{detail.year}</TableCell>
+                          <TableCell>₹{detail.amountDue.toLocaleString()}</TableCell>
+                          <TableCell>₹{detail.amountPaid.toLocaleString()}</TableCell>
+                          <TableCell>₹{detail.discount.toLocaleString()}</TableCell>
+                          <TableCell>{detail.discountRemarks || '-'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <div className="border-t pt-4">
+                    <div className="grid grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <span className="font-medium">Total Due: </span>
+                        ₹{collectionDetails.summary.totalDue.toLocaleString()}
+                      </div>
+                      <div>
+                        <span className="font-medium">Total Paid: </span>
+                        ₹{collectionDetails.summary.totalPaid.toLocaleString()}
+                      </div>
+                      <div>
+                        <span className="font-medium">Total Discount: </span>
+                        ₹{collectionDetails.summary.totalDiscount.toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <DialogFooter>
+                <Button onClick={() => setShowDetailsDialog(false)}>Close</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
-          {/* Tabs */}
+
+
+
+
+          {/* Tab Navigation */}
           <div className="flex space-x-1 bg-muted p-1 rounded-lg w-fit">
-            <button
-              onClick={() => {
-                setActiveTab('class-fees');
-                fetchClassFeeStructures();
-              }}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                activeTab === 'class-fees' ? 'bg-background shadow-sm' : 'hover:bg-background/50'
-              }`}
+            <Button
+              variant={activeTab === 'structures' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setActiveTab('structures')}
             >
-              Class Fees
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab('records');
-                fetchFeeRecords();
-              }}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                activeTab === 'records' ? 'bg-background shadow-sm' : 'hover:bg-background/50'
-              }`}
+              Fee Structures
+            </Button>
+            <Button
+              variant={activeTab === 'collections' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setActiveTab('collections')}
             >
-              Payment Records
-            </button>
-            <button
-              onClick={() => setActiveTab('due')}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                activeTab === 'due' ? 'bg-background shadow-sm' : 'hover:bg-background/50'
-              }`}
-            >
-              Due Fees
-            </button>
+              Fee Collections
+            </Button>
           </div>
 
-          {/* Tab Content */}
-          {activeTab === 'class-fees' && (
+          {activeTab === 'structures' && (
             <Card>
               <CardHeader>
                 <CardTitle>Class Fee Structures</CardTitle>
@@ -477,7 +517,6 @@ export default function Fees() {
                     ))}
                   </TableBody>
                 </Table>
-                {/* Pagination */}
                 <div className="flex items-center justify-between mt-4">
                   <p className="text-sm text-muted-foreground">
                     Showing {Math.min(classFeeStructures.length, itemsPerPage)} of {classFeeStructures.length} fee structures
@@ -502,79 +541,51 @@ export default function Fees() {
             </Card>
           )}
 
-          {activeTab === 'records' && (
+          {activeTab === 'collections' && (
             <Card>
               <CardHeader>
-                <CardTitle>Recent Payment Records</CardTitle>
-                <CardDescription>Latest fee payments received</CardDescription>
+                <CardTitle>Fee Collection Records</CardTitle>
+                <CardDescription>Payment collections grouped by student and date</CardDescription>
               </CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Student</TableHead>
-                      <TableHead>Fee Type</TableHead>
-                      <TableHead>Month</TableHead>
-                      <TableHead>Amount Due</TableHead>
-                      <TableHead>Amount Paid</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>Admission No</TableHead>
+                      <TableHead>Class</TableHead>
                       <TableHead>Payment Date</TableHead>
+                      <TableHead>Total Amount</TableHead>
+                      <TableHead>Discount</TableHead>
+                      <TableHead>Fee Count</TableHead>
+                      <TableHead>Payment Method</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {feeRecords.map((record) => (
-                      <TableRow key={record._id}>
-                        <TableCell className="font-medium">{record.student?.name || 'N/A'}</TableCell>
-                        <TableCell>{record.feeType?.name || 'N/A'}</TableCell>
-                        <TableCell>{record.month}</TableCell>
-                        <TableCell>₹{record.amountDue.toLocaleString()}</TableCell>
-                        <TableCell>₹{record.amountPaid.toLocaleString()}</TableCell>
+                    {collectionRecords.map((collection) => (
+                      <TableRow key={collection.collectionId}>
+                        <TableCell className="font-medium">{collection.student.name}</TableCell>
+                        <TableCell>{collection.student.admissionNo}</TableCell>
+                        <TableCell>{collection.student.className}</TableCell>
+                        <TableCell>{new Date(collection.paymentDate).toLocaleDateString()}</TableCell>
+                        <TableCell>₹{collection.totalAmount.toLocaleString()}</TableCell>
+                        <TableCell>₹{collection.totalDiscount.toLocaleString()}</TableCell>
+                        <TableCell>{collection.feeCount} fees</TableCell>
                         <TableCell>
-                          <span className={`px-2 py-1 rounded-full text-xs ${
-                            record.status === 'paid' ? 'bg-green-100 text-green-800' :
-                            record.status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-red-100 text-red-800'
-                          }`}>
-                            {record.status}
+                          <span className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
+                            {collection.paymentMethod}
                           </span>
                         </TableCell>
                         <TableCell>
-                          {record.paymentDate ? new Date(record.paymentDate).toLocaleDateString() : '-'}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          )}
-
-          {activeTab === 'due' && dueSummary && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Outstanding Fees</CardTitle>
-                <CardDescription>Students with unpaid or partially paid fees</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Student Name</TableHead>
-                      <TableHead>Admission No</TableHead>
-                      <TableHead>Guardian Name</TableHead>
-                      <TableHead>Guardian Contact</TableHead>
-                      <TableHead>Total Outstanding</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {dueSummary.map((student) => (
-                      <TableRow key={student.studentId}>
-                        <TableCell className="font-medium">{student.name}</TableCell>
-                        <TableCell>{student.admissionNo}</TableCell>
-                        <TableCell>{student.guardianName}</TableCell>
-                        <TableCell>{student.guardianContact}</TableCell>
-                        <TableCell className="font-semibold text-red-600">
-                          ₹{student.totalDue.toLocaleString()}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleViewDetails(collection.collectionId)}
+                          >
+                            <Eye className="mr-2 h-4 w-4" />
+                            View Details
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
