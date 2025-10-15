@@ -765,7 +765,9 @@ const receiptHandler = async (req, res) => {
       className: firstPayment.studentId.className || firstPayment.studentId.class?.className || 'N/A',
       feeBreakdown: payments.map(payment => ({
         name: payment.feeRecordId.feeTypeId.name || 'Fee Payment',
-        amount: payment.amountPaid || 0
+        amountPaid: payment.amountPaid || 0,
+        discount: payment.discount || 0,
+        paymentRatio: 'N/A'
       })),
       totalAmount,
       discount: totalDiscount,
@@ -777,18 +779,29 @@ const receiptHandler = async (req, res) => {
     
     console.log('Receipt data:', JSON.stringify(receiptData, null, 2));
     
+    console.log('Calling generateReceiptPDF...');
     const pdfBuffer = await generateReceiptPDF(receiptData);
+    console.log('PDF buffer received, type:', typeof pdfBuffer);
+    console.log('PDF buffer length:', pdfBuffer ? pdfBuffer.length : 'null/undefined');
+    console.log('PDF buffer is Buffer?', Buffer.isBuffer(pdfBuffer));
     
     if (!pdfBuffer || pdfBuffer.length === 0) {
+      console.error('PDF buffer is empty or null');
       throw new Error('Generated PDF buffer is empty');
     }
     
-    console.log('PDF generated successfully, sending response');
+    console.log('Converting PDF to Buffer...');
+    const buffer = Buffer.from(pdfBuffer);
+    console.log('Buffer created, size:', buffer.length);
     
+    console.log('Setting response headers...');
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Length', pdfBuffer.length);
+    res.setHeader('Content-Length', buffer.length);
     res.setHeader('Content-Disposition', `attachment; filename="receipt-${receiptNumber}.pdf"`);
-    res.send(pdfBuffer);
+    
+    console.log('Sending PDF buffer to client...');
+    res.send(buffer);
+    console.log('PDF response sent successfully');
     
   } catch (error) {
     console.error('Error generating receipt:', error);

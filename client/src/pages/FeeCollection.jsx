@@ -298,11 +298,17 @@ export default function FeeCollection() {
     setDownloadingReceipt(true);
     try {
       const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      console.log('Requesting receipt for payment ID:', paymentId);
+      console.log('API URL:', `${API_BASE_URL}/fees/receipt/${paymentId}`);
+      
       const receiptResponse = await fetch(`${API_BASE_URL}/fees/receipt/${paymentId}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
+
+      console.log('Receipt response status:', receiptResponse.status);
+      console.log('Receipt response headers:', Object.fromEntries(receiptResponse.headers.entries()));
 
       if (!receiptResponse.ok) {
         const errorText = await receiptResponse.text();
@@ -310,21 +316,31 @@ export default function FeeCollection() {
         throw new Error('Failed to generate receipt');
       }
 
+      console.log('Converting response to blob...');
       const blob = await receiptResponse.blob();
+      console.log('Blob created - size:', blob.size, 'type:', blob.type);
       
       if (blob.size === 0) {
+        console.error('Received empty blob');
         throw new Error('Received empty PDF');
       }
       
+      console.log('Creating download URL...');
       const url = window.URL.createObjectURL(blob);
+      console.log('Download URL created:', url);
+      
       const a = document.createElement('a');
       a.style.display = 'none';
       a.href = url;
       a.download = `receipt-${studentName.replace(/\s+/g, '-')}.pdf`;
+      console.log('Download filename:', a.download);
+      
       document.body.appendChild(a);
+      console.log('Triggering download...');
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
+      console.log('Download completed successfully');
     } catch (error) {
       console.error('Error downloading receipt:', error);
       toast.error('Receipt download failed', {
