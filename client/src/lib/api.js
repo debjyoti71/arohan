@@ -131,4 +131,15 @@ export const uploadAPI = {
   }),
 };
 
+// Configuration API
+export const configAPI = {
+  getFeesConfig: () => api.get('/config/fees'),
+  updateFeesConfig: (data) => api.put('/config/fees', data),
+  getSalaryConfig: () => api.get('/config/salary'),
+  updateSalaryConfig: (data) => api.put('/config/salary', data),
+  getYearProgressionConfig: () => api.get('/config/year-progression'),
+  updateYearProgressionConfig: (data) => api.put('/config/year-progression', data),
+  promoteYear: () => api.post('/config/promote-year'),
+};
+
 export default api;

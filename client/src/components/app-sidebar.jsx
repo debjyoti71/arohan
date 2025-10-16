@@ -8,6 +8,7 @@ import {
   IndianRupee,
   Wallet,
   CreditCard,
+  Settings,
 } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
 import { NavMain } from "@/components/nav-main"
@@ -71,6 +72,12 @@ export function AppSidebar({ ...props }) {
       url: "/finance",
       icon: Wallet,
       isActive: window.location.pathname === '/finance',
+    },
+    {
+      title: "Configuration",
+      url: "/configuration",
+      icon: Settings,
+      isActive: window.location.pathname === '/configuration',
     },
   ];
 

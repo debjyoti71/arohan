@@ -20,6 +20,7 @@ const feeRoutes = require('./routes/fees');
 const dashboardRoutes = require('./routes/dashboard');
 const financeRoutes = require('./routes/finance');
 const uploadRoutes = require('./routes/upload');
+const configRoutes = require('./routes/config');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -55,6 +56,7 @@ app.use('/api/fees', feeRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/finance', financeRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/config', configRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

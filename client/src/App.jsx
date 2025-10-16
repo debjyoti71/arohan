@@ -1,6 +1,7 @@
 import React from 'react'
 import { createBrowserRouter, RouterProvider, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { Toaster } from '@/components/ui/sonner';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Students from './pages/Students';
@@ -11,6 +12,7 @@ import Fees from './pages/Fees';
 import Finance from './pages/Finance';
 import StudentProfile from './pages/StudentProfile';
 import FeeCollection from './pages/FeeCollection';
+import Configuration from './pages/Configuration';
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -114,11 +116,20 @@ function App() {
         </ProtectedRoute>
       ) 
     },
+    { 
+      path: "/configuration", 
+      element: (
+        <ProtectedRoute>
+          <Configuration />
+        </ProtectedRoute>
+      ) 
+    },
   ])
   
   return (
     <AuthProvider>
       <RouterProvider router={router} />
+      <Toaster />
     </AuthProvider>
   )
 }
