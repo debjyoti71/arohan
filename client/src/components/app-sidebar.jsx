@@ -22,63 +22,63 @@ import {
 } from "@/components/ui/sidebar"
 
 export function AppSidebar({ ...props }) {
-  const { user, hasPermission } = useAuth();
+  const { user, hasPermission, hasAnyPermission } = useAuth();
 
   const navItems = [
-    {
+    ...(hasPermission('dashboard', 'read') || user?.role === 'admin' ? [{
       title: "Dashboard",
       url: "/dashboard",
       icon: LayoutDashboard,
       isActive: window.location.pathname === '/dashboard',
-    },
-    ...(hasPermission('students', 'read') ? [{
+    }] : []),
+    ...(hasAnyPermission('students') ? [{
       title: "Students",
       url: "/students",
       icon: Users,
       isActive: window.location.pathname.startsWith('/students'),
     }] : []),
-    ...(hasPermission('staff', 'read') ? [{
+    ...(hasAnyPermission('staff') ? [{
       title: "Staff",
       url: "/staff",
       icon: GraduationCap,
       isActive: window.location.pathname === '/staff',
     }] : []),
-    ...(hasPermission('classes', 'read') ? [{
+    ...(hasAnyPermission('classes') ? [{
       title: "Classes",
       url: "/classes",
       icon: School,
       isActive: window.location.pathname === '/classes',
     }] : []),
-    ...(hasPermission('users', 'read') ? [{
+    ...(hasAnyPermission('users') ? [{
       title: "Users",
       url: "/users",
       icon: UserCheck,
       isActive: window.location.pathname === '/users',
     }] : []),
-    ...(hasPermission('fees', 'read') ? [{
+    ...(hasAnyPermission('fees') ? [{
       title: "Fees",
       url: "/fees",
       icon: IndianRupee,
       isActive: window.location.pathname === '/fees',
     }] : []),
-    ...(hasPermission('fees', 'read') ? [{
+    ...(hasPermission('fees', 'create') || hasPermission('fees', 'update') ? [{
       title: "Fee Collection",
       url: "/fee-collection",
       icon: CreditCard,
       isActive: window.location.pathname === '/fee-collection',
     }] : []),
-    {
+    ...(hasAnyPermission('finance') ? [{
       title: "Finance",
       url: "/finance",
       icon: Wallet,
       isActive: window.location.pathname === '/finance',
-    },
-    {
+    }] : []),
+    ...(hasAnyPermission('configuration') ? [{
       title: "Configuration",
       url: "/configuration",
       icon: Settings,
       isActive: window.location.pathname === '/configuration',
-    },
+    }] : []),
   ];
 
   return (
@@ -97,7 +97,7 @@ export function AppSidebar({ ...props }) {
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={{
-          name: user?.staff?.name || user?.username || 'User',
+          name: user?.username || 'User',
           email: user?.alias || user?.role || 'Role',
           avatar: '/avatars/default.jpg'
         }} />

@@ -5,6 +5,7 @@ const Class = require('../models/Class');
 const ClassFeeStructure = require('../models/ClassFeeStructure');
 const StudentFeeCustom = require('../models/StudentFeeCustom');
 const { authenticateToken, authorize } = require('../middleware/auth');
+const { activityLogger } = require('../middleware/activityLogger');
 
 const router = express.Router();
 
@@ -94,7 +95,7 @@ router.get('/:id', authenticateToken, authorize(['students:read']), async (req, 
 });
 
 // Create new student
-router.post('/', authenticateToken, authorize(['students:create']), async (req, res) => {
+router.post('/', authenticateToken, authorize(['students:create']), activityLogger('create', 'student'), async (req, res) => {
   try {
     const { error } = studentSchema.validate(req.body);
     if (error) {
@@ -130,7 +131,7 @@ router.post('/', authenticateToken, authorize(['students:create']), async (req, 
 });
 
 // Update student
-router.put('/:id', authenticateToken, authorize(['students:update']), async (req, res) => {
+router.put('/:id', authenticateToken, authorize(['students:update']), activityLogger('update', 'student'), async (req, res) => {
   try {
     const { error } = studentSchema.validate(req.body);
     if (error) {
@@ -155,7 +156,7 @@ router.put('/:id', authenticateToken, authorize(['students:update']), async (req
 });
 
 // Delete student
-router.delete('/:id', authenticateToken, authorize(['students:delete']), async (req, res) => {
+router.delete('/:id', authenticateToken, authorize(['students:delete']), activityLogger('delete', 'student'), async (req, res) => {
   try {
     const deletedStudent = await Student.findByIdAndDelete(req.params.id);
     
@@ -171,7 +172,7 @@ router.delete('/:id', authenticateToken, authorize(['students:delete']), async (
 });
 
 // Update student fee structure
-router.put('/:id/fee-structure', authenticateToken, authorize(['students:update']), async (req, res) => {
+router.put('/:id/fee-structure', authenticateToken, authorize(['students:update']), activityLogger('update', 'student_fee_structure'), async (req, res) => {
   try {
     const studentId = req.params.id;
     const { customizations } = req.body;

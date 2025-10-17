@@ -73,7 +73,20 @@ export const AuthProvider = ({ children }) => {
     if (user.role === 'admin') return true;
     
     const permissions = user.permissions || {};
-    return permissions[resource] && permissions[resource][action];
+    return permissions[resource] && permissions[resource].includes(action);
+  };
+
+  const hasAnyPermission = (resource) => {
+    if (!user) return false;
+    if (user.role === 'admin') return true;
+    
+    const permissions = user.permissions || {};
+    return permissions[resource] && permissions[resource].length > 0;
+  };
+
+  const getUserPermissions = () => {
+    if (!user) return {};
+    return user.permissions || {};
   };
 
   const value = {
@@ -81,6 +94,8 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     hasPermission,
+    hasAnyPermission,
+    getUserPermissions,
     loading
   };
 

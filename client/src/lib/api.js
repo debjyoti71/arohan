@@ -90,6 +90,9 @@ export const usersAPI = {
   update: (id, data) => api.put(`/users/${id}`, data),
   delete: (id) => api.delete(`/users/${id}`),
   getAvailableStaff: () => api.get('/users/available/staff'),
+  getPredefinedRoles: () => api.get('/users/roles/predefined'),
+  getAllPermissions: () => api.get('/users/permissions/all'),
+  getActiveUsers: () => api.get('/users/active'),
 };
 
 // Fees API

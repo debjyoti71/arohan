@@ -5,6 +5,7 @@ const User = require('../models/User');
 const Class = require('../models/Class');
 const StaffTransaction = require('../models/StaffTransaction');
 const { authenticateToken, authorize } = require('../middleware/auth');
+const { activityLogger } = require('../middleware/activityLogger');
 const salaryConfig = require('../../config/salary');
 
 const router = express.Router();
@@ -111,7 +112,7 @@ router.get('/:id', authenticateToken, authorize(['staff:read']), async (req, res
 });
 
 // Create new staff
-router.post('/', authenticateToken, authorize(['staff:create']), async (req, res) => {
+router.post('/', authenticateToken, authorize(['staff:create']), activityLogger('create', 'staff'), async (req, res) => {
   try {
     const { error } = staffSchema.validate(req.body);
     if (error) {
@@ -131,7 +132,7 @@ router.post('/', authenticateToken, authorize(['staff:create']), async (req, res
 });
 
 // Update staff
-router.put('/:id', authenticateToken, authorize(['staff:update']), async (req, res) => {
+router.put('/:id', authenticateToken, authorize(['staff:update']), activityLogger('update', 'staff'), async (req, res) => {
   try {
     const { error } = staffSchema.validate(req.body);
     if (error) {
@@ -155,7 +156,7 @@ router.put('/:id', authenticateToken, authorize(['staff:update']), async (req, r
 });
 
 // Delete staff
-router.delete('/:id', authenticateToken, authorize(['staff:delete']), async (req, res) => {
+router.delete('/:id', authenticateToken, authorize(['staff:delete']), activityLogger('delete', 'staff'), async (req, res) => {
   try {
     const staffId = req.params.id;
     
@@ -259,7 +260,7 @@ router.get('/transactions', authenticateToken, authorize(['staff:read']), async 
 });
 
 // Add staff transaction
-router.post('/transactions', authenticateToken, authorize(['staff:create']), async (req, res) => {
+router.post('/transactions', authenticateToken, authorize(['staff:create']), activityLogger('create', 'staff_transaction'), async (req, res) => {
   try {
     const { error } = transactionSchema.validate(req.body);
     if (error) {

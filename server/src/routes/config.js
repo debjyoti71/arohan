@@ -159,7 +159,7 @@ router.post('/promote-year', authenticateToken, async (req, res) => {
       });
     });
 
-    // Export to Google Sheets (basic implementation)
+    // Export to Google Sheets
     let sheetsExported = false;
     try {
       if (process.env.GOOGLE_SHEETS_ENABLED === 'true' && 
@@ -167,26 +167,50 @@ router.post('/promote-year', authenticateToken, async (req, res) => {
           process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && 
           process.env.GOOGLE_PRIVATE_KEY) {
         
-        // Initialize Google Sheets (requires service account credentials)
+        console.log('=== GOOGLE SHEETS EXPORT STARTED ===');
+        console.log(`Sheet data count: ${sheetData.length}`);
+        
+        // Initialize Google Sheets
         const serviceAccountAuth = new JWT({
-          email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-          key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+          email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL.replace(/"/g, ''),
+          key: process.env.GOOGLE_PRIVATE_KEY.replace(/"/g, '').replace(/\\n/g, '\n'),
           scopes: ['https://www.googleapis.com/auth/spreadsheets']
         });
 
         const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, serviceAccountAuth);
         await doc.loadInfo();
+        console.log(`Connected to sheet: ${doc.title}`);
         
         const sheet = doc.sheetsByIndex[0];
+        console.log(`Using sheet: ${sheet.title}`);
+        
+        // Clear existing data
         await sheet.clear();
+        console.log('Sheet cleared');
+        
         if (sheetData.length > 0) {
-          await sheet.setHeaderRow(Object.keys(sheetData[0]));
+          // Set headers
+          const headers = Object.keys(sheetData[0]);
+          await sheet.setHeaderRow(headers);
+          console.log(`Headers set: ${headers.join(', ')}`);
+          
+          // Add data rows
           await sheet.addRows(sheetData);
+          console.log(`Added ${sheetData.length} rows to sheet`);
+          
+          sheetsExported = true;
+        } else {
+          console.log('No data to export to sheets');
         }
-        sheetsExported = true;
+        
+        console.log('=== GOOGLE SHEETS EXPORT COMPLETED ===');
+      } else {
+        console.log('Google Sheets export disabled or missing credentials');
       }
     } catch (sheetError) {
-      console.warn('Google Sheets export failed:', sheetError.message);
+      console.error('=== GOOGLE SHEETS EXPORT ERROR ===');
+      console.error('Google Sheets export failed:', sheetError.message);
+      console.error('Error details:', sheetError);
       // Continue with promotion even if sheets export fails
     }
 

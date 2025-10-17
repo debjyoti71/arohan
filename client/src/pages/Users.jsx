@@ -4,19 +4,24 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { usersAPI } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
-import { Search, Trash2 } from 'lucide-react';
+import { Search, Trash2, Plus, Users as UsersIcon, Eye, Edit } from 'lucide-react';
+import CreateUserDialog from '@/components/CreateUserDialog';
+import ActiveUsersDialog from '@/components/ActiveUsersDialog';
 
 export default function Users() {
   const { hasPermission } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showActiveUsers, setShowActiveUsers] = useState(false);
 
   useEffect(() => {
     fetchUsers();
@@ -73,7 +78,22 @@ export default function Users() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold">Users</h1>
-              <p className="text-muted-foreground">Manage user accounts</p>
+              <p className="text-muted-foreground">Manage user accounts and permissions</p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowActiveUsers(true)}
+              >
+                <UsersIcon className="h-4 w-4 mr-2" />
+                Active Users
+              </Button>
+              {hasPermission('users', 'create') && (
+                <Button onClick={() => setShowCreateDialog(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add User
+                </Button>
+              )}
             </div>
           </div>
 
@@ -98,9 +118,9 @@ export default function Users() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Username</TableHead>
-                      <TableHead>Staff Name</TableHead>
+                      <TableHead>Display Name</TableHead>
                       <TableHead>Role</TableHead>
-                      <TableHead>Alias</TableHead>
+                      <TableHead>Status</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -108,27 +128,35 @@ export default function Users() {
                     {users.map((user) => (
                       <TableRow key={user.userId}>
                         <TableCell className="font-medium">{user.username}</TableCell>
-                        <TableCell>{user.staff?.name}</TableCell>
-                        <TableCell>
-                          <span className={`px-2 py-1 rounded-full text-xs ${
-                            user.role === 'admin' ? 'bg-red-100 text-red-800' :
-                            user.role === 'principal' ? 'bg-purple-100 text-purple-800' :
-                            'bg-blue-100 text-blue-800'
-                          }`}>
-                            {user.role}
-                          </span>
-                        </TableCell>
                         <TableCell>{user.alias || '-'}</TableCell>
                         <TableCell>
-                          {hasPermission('users', 'delete') && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteUser(user.userId)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
+                          <Badge variant={user.role === 'admin' ? 'destructive' : user.role === 'principal' ? 'secondary' : 'default'}>
+                            {user.role}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${user.isOnline ? 'bg-green-500' : 'bg-gray-300'}`} />
+                            {user.isOnline ? 'Online' : 'Offline'}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            {hasPermission('users', 'update') && (
+                              <Button variant="ghost" size="sm">
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {hasPermission('users', 'delete') && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteUser(user.userId)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -139,6 +167,17 @@ export default function Users() {
           </Card>
         </div>
       </SidebarInset>
+      
+      <CreateUserDialog 
+        open={showCreateDialog} 
+        onOpenChange={setShowCreateDialog}
+        onSuccess={fetchUsers}
+      />
+      
+      <ActiveUsersDialog 
+        open={showActiveUsers} 
+        onOpenChange={setShowActiveUsers}
+      />
     </SidebarProvider>
   );
 }

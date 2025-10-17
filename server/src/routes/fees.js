@@ -9,6 +9,7 @@ const Class = require('../models/Class');
 const Student = require('../models/Student');
 const User = require('../models/User');
 const { authenticateToken, authorize } = require('../middleware/auth');
+const { activityLogger } = require('../middleware/activityLogger');
 const { generateReceiptPDF } = require('../utils/receiptGenerator');
 
 const router = express.Router();
@@ -54,7 +55,7 @@ router.get('/types', authenticateToken, authorize(['fees:read']), async (req, re
   }
 });
 
-router.post('/types', authenticateToken, authorize(['fees:create']), async (req, res) => {
+router.post('/types', authenticateToken, authorize(['fees:create']), activityLogger('create', 'fee_type'), async (req, res) => {
   try {
     const { error } = feeTypeSchema.validate(req.body);
     if (error) {
@@ -72,7 +73,7 @@ router.post('/types', authenticateToken, authorize(['fees:create']), async (req,
   }
 });
 
-router.put('/types/:id', authenticateToken, authorize(['fees:update']), async (req, res) => {
+router.put('/types/:id', authenticateToken, authorize(['fees:update']), activityLogger('update', 'fee_type'), async (req, res) => {
   try {
     const { error } = feeTypeSchema.validate(req.body);
     if (error) {
@@ -95,7 +96,7 @@ router.put('/types/:id', authenticateToken, authorize(['fees:update']), async (r
   }
 });
 
-router.delete('/types/:id', authenticateToken, authorize(['fees:delete']), async (req, res) => {
+router.delete('/types/:id', authenticateToken, authorize(['fees:delete']), activityLogger('delete', 'fee_type'), async (req, res) => {
   try {
     // Check if fee type is used in class fee structures
     const usageCount = await ClassFeeStructure.countDocuments({ feeTypeId: req.params.id });
@@ -142,7 +143,7 @@ router.get('/class-structure', authenticateToken, authorize(['fees:read']), asyn
   }
 });
 
-router.post('/class-structure', authenticateToken, authorize(['fees:create']), async (req, res) => {
+router.post('/class-structure', authenticateToken, authorize(['fees:create']), activityLogger('create', 'class_fee_structure'), async (req, res) => {
   try {
     const { error } = classFeeStructureSchema.validate(req.body);
     if (error) {
@@ -434,7 +435,7 @@ router.get('/records', authenticateToken, authorize(['fees:read']), async (req, 
 });
 
 // Generate fees for students
-router.post('/generate', authenticateToken, authorize(['fees:create']), async (req, res) => {
+router.post('/generate', authenticateToken, authorize(['fees:create']), activityLogger('generate', 'fees'), async (req, res) => {
   try {
     const { month, year, classIds = [] } = req.body;
     
@@ -495,7 +496,7 @@ router.post('/generate', authenticateToken, authorize(['fees:create']), async (r
 });
 
 // Record payment
-router.post('/payment', authenticateToken, authorize(['fees:create']), async (req, res) => {
+router.post('/payment', authenticateToken, authorize(['fees:create']), activityLogger('collect', 'fee_payment'), async (req, res) => {
   try {
     console.log('Payment request body:', JSON.stringify(req.body, null, 2));
     

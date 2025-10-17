@@ -12,12 +12,22 @@ A comprehensive, production-ready School Management System built with the PERN s
 - **User Management**: Role-based user accounts with granular permissions
 - **Fee Management**: Complex fee structures, payment tracking, and receipt generation
 
-### 🔐 Security & Authentication
-- JWT-based authentication
-- Role-based access control (RBAC)
-- Granular permissions system
-- Secure password hashing with bcrypt
-- Rate limiting and security headers
+### 🔐 Advanced Security & RBAC
+- **JWT-based Authentication**: Secure token-based authentication system
+- **Role-based Access Control (RBAC)**: Comprehensive permission system with predefined roles
+- **Granular Permissions**: Fine-grained control over user actions and resource access
+- **Real-time Session Tracking**: Monitor active users and their activities
+- **Activity Logging**: Complete audit trail with Google Sheets integration
+- **Custom Role Creation**: Create custom roles with specific permission sets
+- **Secure Password Management**: bcrypt hashing with configurable complexity
+- **Rate Limiting**: Protection against brute force attacks
+
+### 📊 Activity Monitoring & Audit
+- **Google Sheets Integration**: Real-time activity logging to Google Sheets
+- **Comprehensive Audit Trail**: Track all user actions with timestamps and details
+- **Active User Monitoring**: Real-time view of currently logged-in users
+- **Session Management**: Track login times, last activity, and IP addresses
+- **Permission-based UI**: Dynamic interface based on user permissions
 
 ### 🎨 Modern UI/UX
 - Built with shadcn/ui components
@@ -163,16 +173,77 @@ The system uses a comprehensive PostgreSQL schema with the following main entiti
 - `POST /api/fees/generate` - Generate monthly fees
 - `GET /api/fees/due-summary` - Get outstanding fees
 
-## Permission System
+## Role-Based Access Control (RBAC)
 
-The system implements a granular permission system with the following resources:
-- **users**: User management
-- **students**: Student management
-- **staff**: Staff management
-- **classes**: Class management
-- **fees**: Fee management
+### Predefined Roles
 
-Each resource supports CRUD operations (create, read, update, delete) that can be individually assigned to users.
+#### Administrator (admin)
+- **Full System Access**: Complete control over all features and data
+- **User Management**: Create, modify, and delete user accounts
+- **System Configuration**: Access to all configuration settings
+- **All Permissions**: Unrestricted access to all resources and actions
+
+#### Principal (principal)
+- **Academic Management**: Full access to classes, students, and staff
+- **Financial Operations**: Complete fee management and collection
+- **Staff Management**: Hire, manage, and process staff transactions
+- **Restricted Access**: No access to user management, dashboard, or system configuration
+- **Limited Finance**: Cannot view monthly income statistics
+
+#### Staff (staff)
+- **Student Operations**: Full CRUD access to student records
+- **Class Information**: Read-only access to class data
+- **Fee Collection**: Can collect fees and process payments
+- **Limited Access**: No access to staff management, users, or financial reports
+
+#### Custom Roles
+- **Flexible Permissions**: Create custom roles with specific permission combinations
+- **Granular Control**: Select individual permissions from available resources
+- **Role Templates**: Save and reuse custom permission sets
+
+### Permission System
+
+The system implements granular permissions across these resources:
+
+- **dashboard**: System overview and statistics
+- **users**: User account management
+- **students**: Student record management
+- **staff**: Staff member management
+- **classes**: Class organization and management
+- **fees**: Fee structure and payment management
+- **finance**: Financial records and transactions
+- **configuration**: System settings and configuration
+
+Each resource supports these actions:
+- **create**: Add new records
+- **read**: View existing records
+- **update**: Modify existing records
+- **delete**: Remove records
+
+### Activity Logging
+
+All user activities are automatically logged with:
+- **User Information**: Username, alias, and role
+- **Action Details**: What action was performed
+- **Resource Information**: Which resource was affected
+- **Timestamp**: When the action occurred
+- **IP Address**: Where the action originated
+- **Additional Context**: Relevant details about the action
+
+### Google Sheets Integration
+
+Activity logs are automatically synchronized to Google Sheets for:
+- **External Audit**: Independent record keeping
+- **Data Analysis**: Easy filtering and reporting
+- **Backup**: Redundant activity tracking
+- **Compliance**: Meet audit and compliance requirements
+
+### Session Management
+
+- **Real-time Tracking**: Monitor currently active users
+- **Session Details**: Login time, last activity, IP address
+- **Automatic Cleanup**: Sessions expire after 24 hours of inactivity
+- **Security Monitoring**: Track suspicious login patterns
 
 ## Development
 
@@ -202,8 +273,28 @@ arohan/
 
 1. **Backend**: Add routes in `server/src/routes/`
 2. **Frontend**: Add pages in `client/src/pages/`
-3. **Database**: Update Prisma schema and run migrations
-4. **Permissions**: Update permission system in user management
+3. **Database**: Update MongoDB models in `server/src/models/`
+4. **Permissions**: Update permission system in `server/src/utils/permissions.js`
+5. **Activity Logging**: Add activity logging to new routes using `activityLogger` middleware
+6. **RBAC**: Update role definitions and permission checks as needed
+
+### RBAC Setup
+
+1. **Initialize RBAC System**
+   ```bash
+   cd server
+   npm run init:rbac
+   ```
+
+2. **Configure Google Sheets** (Optional)
+   - Follow the guide in `GOOGLE_SHEETS_SETUP.md`
+   - Set up service account and environment variables
+   - Enable real-time activity logging
+
+3. **Create Users**
+   - Use the admin interface to create new users
+   - Assign predefined roles or create custom permissions
+   - Monitor user activities through the active users panel
 
 ## Deployment
 
@@ -217,10 +308,10 @@ arohan/
    CORS_ORIGIN=your_frontend_domain
    ```
 
-2. **Database Migration**
+2. **Database Setup**
    ```bash
-   npx prisma migrate deploy
    npm run db:seed
+   npm run init:rbac
    ```
 
 3. **Build Frontend**

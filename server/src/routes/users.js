@@ -3,18 +3,24 @@ const bcrypt = require('bcryptjs');
 const Joi = require('joi');
 const User = require('../models/User');
 const Staff = require('../models/Staff');
+const ActiveSession = require('../models/ActiveSession');
 const { authenticateToken, authorize } = require('../middleware/auth');
+const { activityLogger } = require('../middleware/activityLogger');
+const { PREDEFINED_ROLES, ALL_PERMISSIONS, formatPermissionsForUser } = require('../utils/permissions');
 
 const router = express.Router();
 
 // Validation schemas
 const userSchema = Joi.object({
-  staffId: Joi.string().required(),
   username: Joi.string().min(3).max(50).required(),
-  password: Joi.string().min(6).required(),
-  role: Joi.string().valid('admin', 'principal', 'staff').required(),
+  password: Joi.string().optional(),
+  role: Joi.string().valid('admin', 'principal', 'staff', 'custom').required(),
   alias: Joi.string().optional(),
-  permissions: Joi.object().optional()
+  permissions: Joi.object().optional(),
+  customPermissions: Joi.array().items(Joi.object({
+    resource: Joi.string().required(),
+    action: Joi.string().required()
+  })).optional()
 });
 
 // Get all users (Admin only)
@@ -31,14 +37,16 @@ router.get('/', authenticateToken, authorize(['users:read']), async (req, res) =
       ];
     }
 
-    const [users, total] = await Promise.all([
+    const [users, total, activeSessions] = await Promise.all([
       User.find(filter)
-        .populate('staffId')
         .skip(parseInt(skip))
         .limit(parseInt(limit))
         .sort({ createdAt: -1 }),
-      User.countDocuments(filter)
+      User.countDocuments(filter),
+      ActiveSession.find({ isActive: true })
     ]);
+
+    const activeUserIds = new Set(activeSessions.map(s => s.userId.toString()));
 
     // Remove password hash from response
     const sanitizedUsers = users.map(user => {
@@ -46,7 +54,7 @@ router.get('/', authenticateToken, authorize(['users:read']), async (req, res) =
       return {
         ...userWithoutPassword,
         userId: user._id,
-        staff: user.staffId ? { ...user.staffId.toObject(), staffId: user.staffId._id } : null
+        isOnline: activeUserIds.has(user._id.toString())
       };
     });
 
@@ -66,29 +74,35 @@ router.get('/', authenticateToken, authorize(['users:read']), async (req, res) =
 });
 
 // Create new user (Admin only)
-router.post('/', authenticateToken, authorize(['users:create']), async (req, res) => {
+router.post('/', authenticateToken, authorize(['users:create']), activityLogger('create', 'user'), async (req, res) => {
   try {
     const { error } = userSchema.validate(req.body);
     if (error) {
       return res.status(400).json({ error: error.details[0].message });
     }
 
-    const { password, ...userData } = req.body;
-    const passwordHash = await bcrypt.hash(password, 10);
+    const { password, customPermissions, ...userData } = req.body;
+    const passwordHash = password ? await bcrypt.hash(password, 10) : await bcrypt.hash('default123', 10);
+
+    // Handle permissions
+    let permissions = {};
+    if (userData.role === 'custom' && customPermissions) {
+      permissions = formatPermissionsForUser(customPermissions);
+    } else if (PREDEFINED_ROLES[userData.role]) {
+      permissions = PREDEFINED_ROLES[userData.role].permissions;
+    }
 
     const user = await User.create({
       ...userData,
-      passwordHash
+      passwordHash,
+      permissions
     });
-    
-    await user.populate('staffId');
 
     // Remove password hash from response
     const { passwordHash: _, ...userWithoutPassword } = user.toObject();
     res.status(201).json({
       ...userWithoutPassword,
-      userId: user._id,
-      staff: user.staffId ? { ...user.staffId.toObject(), staffId: user.staffId._id } : null
+      userId: user._id
     });
   } catch (error) {
     console.error('Create user error:', error);
@@ -99,22 +113,93 @@ router.post('/', authenticateToken, authorize(['users:create']), async (req, res
   }
 });
 
-// Get available staff for user creation
-router.get('/available/staff', authenticateToken, authorize(['users:read']), async (req, res) => {
-  try {
-    const usedStaffIds = await User.distinct('staffId');
-    const availableStaff = await Staff.find({
-      status: 'active',
-      _id: { $nin: usedStaffIds }
-    }).select('name role');
 
-    res.json(availableStaff.map(staff => ({
-      staffId: staff._id,
-      name: staff.name,
-      role: staff.role
-    })));
+
+// Get predefined roles
+router.get('/roles/predefined', authenticateToken, authorize(['users:read']), (req, res) => {
+  res.json(PREDEFINED_ROLES);
+});
+
+// Get all available permissions
+router.get('/permissions/all', authenticateToken, authorize(['users:read']), (req, res) => {
+  res.json(ALL_PERMISSIONS);
+});
+
+// Get active users
+router.get('/active', authenticateToken, authorize(['users:read']), async (req, res) => {
+  try {
+    const activeSessions = await ActiveSession.find({ isActive: true })
+      .populate('userId', 'username alias role')
+      .sort({ lastActivity: -1 });
+
+    const activeUsers = activeSessions.map(session => ({
+      userId: session.userId._id,
+      username: session.userId.username,
+      alias: session.userId.alias,
+      role: session.userId.role,
+      loginTime: session.loginTime,
+      lastActivity: session.lastActivity,
+      ipAddress: session.ipAddress
+    }));
+
+    res.json(activeUsers);
   } catch (error) {
-    console.error('Get available staff error:', error);
+    console.error('Get active users error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update user
+router.put('/:id', authenticateToken, authorize(['users:update']), activityLogger('update', 'user'), async (req, res) => {
+  try {
+    const { password, customPermissions, ...updateData } = req.body;
+    
+    if (password) {
+      updateData.passwordHash = await bcrypt.hash(password, 10);
+    }
+
+    // Handle permissions
+    if (updateData.role === 'custom' && customPermissions) {
+      updateData.permissions = formatPermissionsForUser(customPermissions);
+    } else if (PREDEFINED_ROLES[updateData.role]) {
+      updateData.permissions = PREDEFINED_ROLES[updateData.role].permissions;
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const { passwordHash, ...userWithoutPassword } = user.toObject();
+    res.json({
+      ...userWithoutPassword,
+      userId: user._id
+    });
+  } catch (error) {
+    console.error('Update user error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Delete user
+router.delete('/:id', authenticateToken, authorize(['users:delete']), activityLogger('delete', 'user'), async (req, res) => {
+  try {
+    const user = await User.findByIdAndDelete(req.params.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Remove active session
+    await ActiveSession.deleteOne({ userId: req.params.id });
+
+    res.json({ message: 'User deleted successfully' });
+  } catch (error) {
+    console.error('Delete user error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
