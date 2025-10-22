@@ -81,12 +81,18 @@ export function LoginForm({
             {loading ? 'Logging in...' : 'Login'}
           </Button>
         </Field>
-        
-        <div className="text-center text-sm text-muted-foreground">
-          <p>Default credentials:</p>
-          <p>Username: <strong>admin</strong> | Password: <strong>admin123</strong></p>
-        </div>
       </FieldGroup>
+      
+      <div className="text-center mt-4 pt-4 border-t border-border">
+        <a 
+          href="https://biswajit-chatterjee.dev/" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="text-sm font-medium text-foreground/70 hover:text-primary transition-colors underline decoration-dotted underline-offset-4"
+        >
+          Crafted with precision and passion by Biswajit Chatterjee
+        </a>
+      </div>
     </form>
   );
 }

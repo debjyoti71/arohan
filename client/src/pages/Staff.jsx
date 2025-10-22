@@ -150,7 +150,15 @@ export default function Staff() {
               </BreadcrumbList>
             </Breadcrumb>
           </div>
-          <div className="px-4">
+          <div className="flex items-center gap-3 px-4">
+            <a 
+              href="https://biswajit-chatterjee.dev/" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-xs font-medium text-muted-foreground hover:text-primary transition-colors"
+            >
+              Crafted with precision and passion by Biswajit Chatterjee
+            </a>
             <AnimatedThemeToggler className="p-2 rounded-md hover:bg-accent" />
           </div>
         </header>

@@ -13,7 +13,7 @@ function Login() {
               <School className="size-5" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold">Arohan School</h2>
+              <h2 className="text-lg font-semibold">Arohan Pubblic School</h2>
               <p className="text-xs text-muted-foreground">Management System</p>
             </div>
           </div>
