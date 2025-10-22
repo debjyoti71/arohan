@@ -63,10 +63,7 @@ router.post('/login', async (req, res) => {
     }
 
     // Log login activity
-    await logActivity({
-      user: { userId: user._id, username: user.username, alias: user.alias },
-      ip: req.ip || req.connection.remoteAddress
-    }, 'login', 'auth', { loginTime: new Date() });
+    await logActivity(req, 'login', 'auth', { loginTime: new Date() });
 
     const token = jwt.sign(
       { userId: user._id, username: user.username, role: user.role },

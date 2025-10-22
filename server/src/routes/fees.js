@@ -42,7 +42,7 @@ const paymentSchema = Joi.object({
 });
 
 // Fee Types Management
-router.get('/types', authenticateToken, authorize(['fees:read']), async (req, res) => {
+router.get('/types', authenticateToken, async (req, res) => {
   try {
     const feeTypes = await FeeType.find().sort({ name: 1 });
     res.json(feeTypes.map(ft => ({
@@ -55,7 +55,7 @@ router.get('/types', authenticateToken, authorize(['fees:read']), async (req, re
   }
 });
 
-router.post('/types', authenticateToken, authorize(['fees:create']), activityLogger('create', 'fee_type'), async (req, res) => {
+router.post('/types', authenticateToken, activityLogger('create', 'fee_type'), async (req, res) => {
   try {
     const { error } = feeTypeSchema.validate(req.body);
     if (error) {
@@ -73,7 +73,7 @@ router.post('/types', authenticateToken, authorize(['fees:create']), activityLog
   }
 });
 
-router.put('/types/:id', authenticateToken, authorize(['fees:update']), activityLogger('update', 'fee_type'), async (req, res) => {
+router.put('/types/:id', authenticateToken, activityLogger('update', 'fee_type'), async (req, res) => {
   try {
     const { error } = feeTypeSchema.validate(req.body);
     if (error) {
@@ -96,7 +96,7 @@ router.put('/types/:id', authenticateToken, authorize(['fees:update']), activity
   }
 });
 
-router.delete('/types/:id', authenticateToken, authorize(['fees:delete']), activityLogger('delete', 'fee_type'), async (req, res) => {
+router.delete('/types/:id', authenticateToken, activityLogger('delete', 'fee_type'), async (req, res) => {
   try {
     // Check if fee type is used in class fee structures
     const usageCount = await ClassFeeStructure.countDocuments({ feeTypeId: req.params.id });
@@ -121,7 +121,7 @@ router.delete('/types/:id', authenticateToken, authorize(['fees:delete']), activ
 });
 
 // Class Fee Structure Management
-router.get('/class-structure', authenticateToken, authorize(['fees:read']), async (req, res) => {
+router.get('/class-structure', authenticateToken, async (req, res) => {
   try {
     const { classId } = req.query;
     const filter = classId ? { classId } : {};
@@ -143,7 +143,7 @@ router.get('/class-structure', authenticateToken, authorize(['fees:read']), asyn
   }
 });
 
-router.post('/class-structure', authenticateToken, authorize(['fees:create']), activityLogger('create', 'class_fee_structure'), async (req, res) => {
+router.post('/class-structure', authenticateToken, activityLogger('create', 'class_fee_structure'), async (req, res) => {
   try {
     const { error } = classFeeStructureSchema.validate(req.body);
     if (error) {
@@ -168,7 +168,7 @@ router.post('/class-structure', authenticateToken, authorize(['fees:create']), a
   }
 });
 
-router.delete('/class-structure/:id', authenticateToken, authorize(['fees:delete']), async (req, res) => {
+router.delete('/class-structure/:id', authenticateToken, async (req, res) => {
   try {
     const deletedStructure = await ClassFeeStructure.findByIdAndDelete(req.params.id);
     
@@ -184,7 +184,7 @@ router.delete('/class-structure/:id', authenticateToken, authorize(['fees:delete
 });
 
 // Get fee structure for a specific class
-router.get('/class/:classId/structure', authenticateToken, authorize(['fees:read']), async (req, res) => {
+router.get('/class/:classId/structure', authenticateToken, async (req, res) => {
   try {
     const classId = req.params.classId;
     
@@ -204,7 +204,7 @@ router.get('/class/:classId/structure', authenticateToken, authorize(['fees:read
 });
 
 // Get due fees summary
-router.get('/due-summary', authenticateToken, authorize(['fees:read']), async (req, res) => {
+router.get('/due-summary', authenticateToken, async (req, res) => {
   try {
     const feeRecords = await StudentFeeRecord.find({ status: { $in: ['unpaid', 'partial'] } })
       .populate('studentId')
@@ -217,12 +217,16 @@ router.get('/due-summary', authenticateToken, authorize(['fees:read']), async (r
       
       // Calculate yearly amount
       let yearlyAmount;
-      switch (record.feeTypeId.frequency) {
-        case 'monthly': yearlyAmount = record.amountDue * 12; break;
-        case 'quarterly': yearlyAmount = record.amountDue * 4; break;
-        case 'biannual': yearlyAmount = record.amountDue * 2; break;
-        case 'yearly': yearlyAmount = record.amountDue * 1; break;
-        default: yearlyAmount = record.amountDue * 12;
+      if (record.feeTypeId && record.feeTypeId.frequency) {
+        switch (record.feeTypeId.frequency) {
+          case 'monthly': yearlyAmount = record.amountDue * 12; break;
+          case 'quarterly': yearlyAmount = record.amountDue * 4; break;
+          case 'biannual': yearlyAmount = record.amountDue * 2; break;
+          case 'yearly': yearlyAmount = record.amountDue * 1; break;
+          default: yearlyAmount = record.amountDue * 12;
+        }
+      } else {
+        yearlyAmount = record.amountDue * 12;
       }
       
       const totalPaid = record.payments ? record.payments.reduce((sum, p) => sum + p.amountPaid, 0) : 0;
@@ -255,7 +259,7 @@ router.get('/due-summary', authenticateToken, authorize(['fees:read']), async (r
 });
 
 // Get grouped fee collection records
-router.get('/collection-records', authenticateToken, authorize(['fees:read']), async (req, res) => {
+router.get('/collection-records', authenticateToken, async (req, res) => {
   try {
     const { page = 1, limit = 50 } = req.query;
     const skip = (page - 1) * limit;
@@ -323,7 +327,7 @@ router.get('/collection-records', authenticateToken, authorize(['fees:read']), a
 });
 
 // Get collection details
-router.get('/collection-details/:collectionId', authenticateToken, authorize(['fees:read']), async (req, res) => {
+router.get('/collection-details/:collectionId', authenticateToken, async (req, res) => {
   try {
     const { collectionId } = req.params;
     const [studentId, paymentDate] = collectionId.split('_');
@@ -367,7 +371,7 @@ router.get('/collection-details/:collectionId', authenticateToken, authorize(['f
 });
 
 // Get fee records with payments
-router.get('/records', authenticateToken, authorize(['fees:read']), async (req, res) => {
+router.get('/records', authenticateToken, async (req, res) => {
   try {
     const { studentId, status, page = 1, limit = 50 } = req.query;
     const skip = (page - 1) * limit;
@@ -393,12 +397,16 @@ router.get('/records', authenticateToken, authorize(['fees:read']), async (req, 
         
         // Calculate yearly amount
         let yearlyAmount;
-        switch (record.feeTypeId.frequency) {
-          case 'monthly': yearlyAmount = record.amountDue * 12; break;
-          case 'quarterly': yearlyAmount = record.amountDue * 4; break;
-          case 'biannual': yearlyAmount = record.amountDue * 2; break;
-          case 'yearly': yearlyAmount = record.amountDue * 1; break;
-          default: yearlyAmount = record.amountDue * 12;
+        if (record.feeTypeId && record.feeTypeId.frequency) {
+          switch (record.feeTypeId.frequency) {
+            case 'monthly': yearlyAmount = record.amountDue * 12; break;
+            case 'quarterly': yearlyAmount = record.amountDue * 4; break;
+            case 'biannual': yearlyAmount = record.amountDue * 2; break;
+            case 'yearly': yearlyAmount = record.amountDue * 1; break;
+            default: yearlyAmount = record.amountDue * 12;
+          }
+        } else {
+          yearlyAmount = record.amountDue * 12;
         }
         
         const remainingAmount = Math.max(0, yearlyAmount - totalPaid - totalDiscount);
@@ -435,7 +443,7 @@ router.get('/records', authenticateToken, authorize(['fees:read']), async (req, 
 });
 
 // Generate fees for students
-router.post('/generate', authenticateToken, authorize(['fees:create']), activityLogger('generate', 'fees'), async (req, res) => {
+router.post('/generate', authenticateToken, activityLogger('generate', 'fees'), async (req, res) => {
   try {
     const { month, year, classIds = [] } = req.body;
     
@@ -496,7 +504,7 @@ router.post('/generate', authenticateToken, authorize(['fees:create']), activity
 });
 
 // Record payment
-router.post('/payment', authenticateToken, authorize(['fees:create']), activityLogger('collect', 'fee_payment'), async (req, res) => {
+router.post('/payment', authenticateToken, activityLogger('collect', 'fee_payment'), async (req, res) => {
   try {
     console.log('Payment request body:', JSON.stringify(req.body, null, 2));
     
@@ -548,7 +556,7 @@ router.post('/payment', authenticateToken, authorize(['fees:create']), activityL
         discountRemarks,
         paymentMethod,
         paymentDate: new Date(),
-        receivedBy: req.user.staffId
+        receivedBy: req.user.userId
       });
       
       lastPaymentId = newPayment._id;
@@ -614,7 +622,7 @@ router.post('/payment', authenticateToken, authorize(['fees:create']), activityL
 });
 
 // Process payment with fee structure (for fee collection page)
-router.post('/process-payment', authenticateToken, authorize(['fees:create']), async (req, res) => {
+router.post('/process-payment', authenticateToken, async (req, res) => {
   try {
     const { studentId, feeTypeId, amount, paymentMethod = 'cash', discount = 0, discountRemarks = '' } = req.body;
     
@@ -738,8 +746,8 @@ const receiptHandler = async (req, res) => {
       return res.status(400).json({ error: 'Invalid payment record - missing student or fee type data' });
     }
     
-    const user = await User.findById(req.user.userId).populate('staffId');
-    const staffName = user?.staffId?.name || 'System';
+    const user = await User.findById(req.user.userId);
+    const staffName = user?.username || 'System';
     
     const receiptNumber = `RCPT-${new Date().getFullYear()}/${String(new Date().getMonth() + 1).padStart(2, '0')}-${firstPayment._id.toString().slice(-6).toUpperCase()}`;
     
@@ -811,7 +819,7 @@ const receiptHandler = async (req, res) => {
 };
 
 // Get student fee summary for payment collection
-router.get('/student-summary/:studentId', authenticateToken, authorize(['fees:read']), async (req, res) => {
+router.get('/student-summary/:studentId', authenticateToken, async (req, res) => {
   try {
     const { studentId } = req.params;
     

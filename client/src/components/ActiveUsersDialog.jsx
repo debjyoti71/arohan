@@ -48,7 +48,6 @@ export default function ActiveUsersDialog({ open, onOpenChange }) {
                   <TableHead>Role</TableHead>
                   <TableHead>Login Time</TableHead>
                   <TableHead>Last Activity</TableHead>
-                  <TableHead>IP Address</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -67,12 +66,11 @@ export default function ActiveUsersDialog({ open, onOpenChange }) {
                     <TableCell>
                       {formatDistanceToNow(new Date(user.lastActivity), { addSuffix: true })}
                     </TableCell>
-                    <TableCell className="font-mono text-sm">{user.ipAddress}</TableCell>
                   </TableRow>
                 ))}
                 {activeUsers.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                       No active users
                     </TableCell>
                   </TableRow>

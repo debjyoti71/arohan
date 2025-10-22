@@ -32,7 +32,7 @@ const transactionSchema = Joi.object({
 });
 
 // Get all staff with pagination and filtering
-router.get('/', authenticateToken, authorize(['staff:read']), async (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
     const { page = 1, limit = 10, search, role, status } = req.query;
     const skip = (page - 1) * limit;
@@ -57,7 +57,10 @@ router.get('/', authenticateToken, authorize(['staff:read']), async (req, res) =
     ]);
 
     // Get current salary period
-    const currentPeriod = salaryConfig.getCurrentSalaryPeriod();
+    const currentPeriod = {
+      month: new Date().getMonth() + 1,
+      year: new Date().getFullYear()
+    };
     
     // Check salary status for each staff member
     const staffWithSalaryStatus = await Promise.all(
@@ -93,7 +96,7 @@ router.get('/', authenticateToken, authorize(['staff:read']), async (req, res) =
 });
 
 // Get staff by ID
-router.get('/:id', authenticateToken, authorize(['staff:read']), async (req, res) => {
+router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const staff = await Staff.findById(req.params.id);
 
@@ -112,7 +115,7 @@ router.get('/:id', authenticateToken, authorize(['staff:read']), async (req, res
 });
 
 // Create new staff
-router.post('/', authenticateToken, authorize(['staff:create']), activityLogger('create', 'staff'), async (req, res) => {
+router.post('/', authenticateToken, activityLogger('create', 'staff'), async (req, res) => {
   try {
     const { error } = staffSchema.validate(req.body);
     if (error) {
@@ -132,14 +135,15 @@ router.post('/', authenticateToken, authorize(['staff:create']), activityLogger(
 });
 
 // Update staff
-router.put('/:id', authenticateToken, authorize(['staff:update']), activityLogger('update', 'staff'), async (req, res) => {
+router.put('/:id', authenticateToken, activityLogger('update', 'staff'), async (req, res) => {
   try {
-    const { error } = staffSchema.validate(req.body);
+    const { _id, staffId, createdAt, updatedAt, __v, salaryStatus, ...updateData } = req.body;
+    const { error } = staffSchema.validate(updateData);
     if (error) {
       return res.status(400).json({ error: error.details[0].message });
     }
 
-    const staff = await Staff.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const staff = await Staff.findByIdAndUpdate(req.params.id, updateData, { new: true });
 
     if (!staff) {
       return res.status(404).json({ error: 'Staff member not found' });
@@ -156,17 +160,11 @@ router.put('/:id', authenticateToken, authorize(['staff:update']), activityLogge
 });
 
 // Delete staff
-router.delete('/:id', authenticateToken, authorize(['staff:delete']), activityLogger('delete', 'staff'), async (req, res) => {
+router.delete('/:id', authenticateToken, activityLogger('delete', 'staff'), async (req, res) => {
   try {
     const staffId = req.params.id;
     
-    // Check if staff has associated users
-    const userCount = await User.countDocuments({ staffId });
-    if (userCount > 0) {
-      return res.status(400).json({ 
-        error: 'Cannot delete staff member with associated user accounts. Please delete user accounts first.' 
-      });
-    }
+    // Staff can be deleted since users are no longer linked to staff
 
     // Check if staff is assigned as class teacher
     const classCount = await Class.countDocuments({ classTeacherId: staffId });
@@ -190,7 +188,7 @@ router.delete('/:id', authenticateToken, authorize(['staff:delete']), activityLo
 });
 
 // Get staff transactions
-router.get('/:id/transactions', authenticateToken, authorize(['staff:read']), async (req, res) => {
+router.get('/:id/transactions', authenticateToken, async (req, res) => {
   try {
     const { page = 1, limit = 10, year, month } = req.query;
     const skip = (page - 1) * limit;
@@ -227,7 +225,7 @@ router.get('/:id/transactions', authenticateToken, authorize(['staff:read']), as
 });
 
 // Get all staff transactions
-router.get('/transactions', authenticateToken, authorize(['staff:read']), async (req, res) => {
+router.get('/transactions', authenticateToken, async (req, res) => {
   try {
     const { page = 1, limit = 50 } = req.query;
     const skip = (page - 1) * limit;
@@ -260,7 +258,7 @@ router.get('/transactions', authenticateToken, authorize(['staff:read']), async 
 });
 
 // Add staff transaction
-router.post('/transactions', authenticateToken, authorize(['staff:create']), activityLogger('create', 'staff_transaction'), async (req, res) => {
+router.post('/transactions', authenticateToken, activityLogger('create', 'staff_transaction'), async (req, res) => {
   try {
     const { error } = transactionSchema.validate(req.body);
     if (error) {

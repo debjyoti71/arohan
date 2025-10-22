@@ -30,7 +30,7 @@ const studentSchema = Joi.object({
 });
 
 // Get all students with pagination and filtering
-router.get('/', authenticateToken, authorize(['students:read']), async (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
     const { page = 1, limit = 10, search, classId, status } = req.query;
     const skip = (page - 1) * limit;
@@ -75,7 +75,7 @@ router.get('/', authenticateToken, authorize(['students:read']), async (req, res
 });
 
 // Get student by ID
-router.get('/:id', authenticateToken, authorize(['students:read']), async (req, res) => {
+router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const student = await Student.findById(req.params.id).populate('classId');
 
@@ -95,7 +95,7 @@ router.get('/:id', authenticateToken, authorize(['students:read']), async (req, 
 });
 
 // Create new student
-router.post('/', authenticateToken, authorize(['students:create']), activityLogger('create', 'student'), async (req, res) => {
+router.post('/', authenticateToken, activityLogger('create', 'student'), async (req, res) => {
   try {
     const { error } = studentSchema.validate(req.body);
     if (error) {
@@ -131,7 +131,7 @@ router.post('/', authenticateToken, authorize(['students:create']), activityLogg
 });
 
 // Update student
-router.put('/:id', authenticateToken, authorize(['students:update']), activityLogger('update', 'student'), async (req, res) => {
+router.put('/:id', authenticateToken, activityLogger('update', 'student'), async (req, res) => {
   try {
     const { error } = studentSchema.validate(req.body);
     if (error) {
@@ -156,7 +156,7 @@ router.put('/:id', authenticateToken, authorize(['students:update']), activityLo
 });
 
 // Delete student
-router.delete('/:id', authenticateToken, authorize(['students:delete']), activityLogger('delete', 'student'), async (req, res) => {
+router.delete('/:id', authenticateToken, activityLogger('delete', 'student'), async (req, res) => {
   try {
     const deletedStudent = await Student.findByIdAndDelete(req.params.id);
     
@@ -172,7 +172,7 @@ router.delete('/:id', authenticateToken, authorize(['students:delete']), activit
 });
 
 // Update student fee structure
-router.put('/:id/fee-structure', authenticateToken, authorize(['students:update']), activityLogger('update', 'student_fee_structure'), async (req, res) => {
+router.put('/:id/fee-structure', authenticateToken, activityLogger('update', 'student_fee_structure'), async (req, res) => {
   try {
     const studentId = req.params.id;
     const { customizations } = req.body;
@@ -216,7 +216,7 @@ router.put('/:id/fee-structure', authenticateToken, authorize(['students:update'
 });
 
 // Get student fee structure
-router.get('/:id/fee-structure', authenticateToken, authorize(['students:read']), async (req, res) => {
+router.get('/:id/fee-structure', authenticateToken, async (req, res) => {
   try {
     const studentId = req.params.id;
     

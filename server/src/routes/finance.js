@@ -41,7 +41,7 @@ const transactionSchema = Joi.object({
 });
 
 // Account routes
-router.get('/accounts', authenticateToken, authorize(['finance:read']), async (req, res) => {
+router.get('/accounts', authenticateToken, async (req, res) => {
   try {
     const accounts = await Account.find({ isActive: true }).sort({ name: 1 });
     res.json(accounts.map(acc => ({
@@ -54,7 +54,7 @@ router.get('/accounts', authenticateToken, authorize(['finance:read']), async (r
   }
 });
 
-router.post('/accounts', authenticateToken, authorize(['finance:create']), async (req, res) => {
+router.post('/accounts', authenticateToken, async (req, res) => {
   try {
     const { error } = accountSchema.validate(req.body);
     if (error) {
@@ -72,7 +72,7 @@ router.post('/accounts', authenticateToken, authorize(['finance:create']), async
   }
 });
 
-router.delete('/accounts/:id', authenticateToken, authorize(['finance:delete']), async (req, res) => {
+router.delete('/accounts/:id', authenticateToken, async (req, res) => {
   try {
     const account = await Account.findById(req.params.id);
     if (!account) {
@@ -88,7 +88,7 @@ router.delete('/accounts/:id', authenticateToken, authorize(['finance:delete']),
 });
 
 // Transaction routes
-router.get('/transactions', authenticateToken, authorize(['finance:read']), async (req, res) => {
+router.get('/transactions', authenticateToken, async (req, res) => {
   try {
     const { page = 1, limit = 20, type, category, accountId } = req.query;
     const skip = (page - 1) * limit;
@@ -132,7 +132,7 @@ router.get('/transactions', authenticateToken, authorize(['finance:read']), asyn
   }
 });
 
-router.post('/transactions', authenticateToken, authorize(['finance:create']), async (req, res) => {
+router.post('/transactions', authenticateToken, async (req, res) => {
   try {
     const { error } = transactionSchema.validate(req.body);
     if (error) {
@@ -213,7 +213,7 @@ router.post('/transactions', authenticateToken, authorize(['finance:create']), a
 });
 
 // Dashboard summary
-router.get('/summary', authenticateToken, authorize(['finance:read']), async (req, res) => {
+router.get('/summary', authenticateToken, async (req, res) => {
   try {
     const accounts = await Account.find({ isActive: true });
     const totalBalance = accounts.reduce((sum, acc) => sum + acc.balance, 0);
@@ -269,7 +269,7 @@ router.get('/summary', authenticateToken, authorize(['finance:read']), async (re
 });
 
 // Get student fee summary with payment ratios
-router.get('/students/:id/fee-summary', authenticateToken, authorize(['fees:read']), async (req, res) => {
+router.get('/students/:id/fee-summary', authenticateToken, async (req, res) => {
   try {
     const StudentFeeCustom = require('../models/StudentFeeCustom');
     const FeeType = require('../models/FeeType');
@@ -296,7 +296,7 @@ router.get('/students/:id/fee-summary', authenticateToken, authorize(['fees:read
 });
 
 // Process fee payment with ratio calculation
-router.post('/payment-with-ratio', authenticateToken, authorize(['fees:create']), async (req, res) => {
+router.post('/payment-with-ratio', authenticateToken, async (req, res) => {
   try {
     const { studentId, feeTypeId, amount, paymentMethod, paymentDate } = req.body;
     
@@ -331,7 +331,7 @@ router.post('/payment-with-ratio', authenticateToken, authorize(['fees:create'])
 });
 
 // Apply discount to student fee
-router.post('/apply-discount', authenticateToken, authorize(['fees:update']), async (req, res) => {
+router.post('/apply-discount', authenticateToken, async (req, res) => {
   try {
     const { studentId, feeTypeId, discountAmount, discountReason, effectiveFrom, effectiveTo } = req.body;
     
@@ -356,7 +356,7 @@ router.post('/apply-discount', authenticateToken, authorize(['fees:update']), as
 });
 
 // Manual trigger for fee recalculation (for testing)
-router.post('/trigger-fee-recalculation', authenticateToken, authorize(['finance:create']), async (req, res) => {
+router.post('/trigger-fee-recalculation', authenticateToken, async (req, res) => {
   try {
     const FeeScheduler = require('../utils/feeScheduler');
     await FeeScheduler.triggerRecalculation();
@@ -368,7 +368,7 @@ router.post('/trigger-fee-recalculation', authenticateToken, authorize(['finance
 });
 
 // Manual trigger for auto fee generation (for testing)
-router.post('/trigger-auto-generation', authenticateToken, authorize(['finance:create']), async (req, res) => {
+router.post('/trigger-auto-generation', authenticateToken, async (req, res) => {
   try {
     const AutoFeeGenerator = require('../utils/autoFeeGenerator');
     await AutoFeeGenerator.triggerGeneration();
@@ -380,7 +380,7 @@ router.post('/trigger-auto-generation', authenticateToken, authorize(['finance:c
 });
 
 // Get fee payment summaries for all students
-router.get('/payment-summaries', authenticateToken, authorize(['fees:read']), async (req, res) => {
+router.get('/payment-summaries', authenticateToken, async (req, res) => {
   try {
     const FeePaymentSummary = require('../models/FeePaymentSummary');
     const summaries = await FeePaymentSummary.find({})
@@ -399,7 +399,7 @@ router.get('/payment-summaries', authenticateToken, authorize(['fees:read']), as
 });
 
 // Get fee configuration
-router.get('/fee-config', authenticateToken, authorize(['fees:read']), async (req, res) => {
+router.get('/fee-config', authenticateToken, async (req, res) => {
   try {
     const feeConfig = require('../../config/fees');
     res.json(feeConfig);
@@ -410,7 +410,7 @@ router.get('/fee-config', authenticateToken, authorize(['fees:read']), async (re
 });
 
 // Update fee configuration
-router.put('/fee-config', authenticateToken, authorize(['finance:update']), async (req, res) => {
+router.put('/fee-config', authenticateToken, async (req, res) => {
   try {
     const ConfigManager = require('../utils/configManager');
     
@@ -428,6 +428,21 @@ router.put('/fee-config', authenticateToken, authorize(['finance:update']), asyn
   } catch (error) {
     console.error('Update fee config error:', error);
     res.status(400).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+// Get staff for salary dropdown
+router.get('/staff', authenticateToken, async (req, res) => {
+  try {
+    const Staff = require('../models/Staff');
+    const staff = await Staff.find({ status: 'active' }).select('name role salary').sort({ name: 1 });
+    res.json(staff.map(s => ({
+      ...s.toObject(),
+      staffId: s._id
+    })));
+  } catch (error) {
+    console.error('Get staff for finance error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

@@ -1,3 +1,3 @@
 module.exports = {
-  "salaryResetDay": 18
+  "salaryResetDay": 23
 };

@@ -23,8 +23,8 @@ const userSchema = Joi.object({
   })).optional()
 });
 
-// Get all users (Admin only)
-router.get('/', authenticateToken, authorize(['users:read']), async (req, res) => {
+// Get all users
+router.get('/', authenticateToken, async (req, res) => {
   try {
     const { page = 1, limit = 10, search } = req.query;
     const skip = (page - 1) * limit;
@@ -73,8 +73,8 @@ router.get('/', authenticateToken, authorize(['users:read']), async (req, res) =
   }
 });
 
-// Create new user (Admin only)
-router.post('/', authenticateToken, authorize(['users:create']), activityLogger('create', 'user'), async (req, res) => {
+// Create new user
+router.post('/', authenticateToken, activityLogger('create', 'user'), async (req, res) => {
   try {
     const { error } = userSchema.validate(req.body);
     if (error) {
@@ -116,17 +116,17 @@ router.post('/', authenticateToken, authorize(['users:create']), activityLogger(
 
 
 // Get predefined roles
-router.get('/roles/predefined', authenticateToken, authorize(['users:read']), (req, res) => {
+router.get('/roles/predefined', authenticateToken, (req, res) => {
   res.json(PREDEFINED_ROLES);
 });
 
 // Get all available permissions
-router.get('/permissions/all', authenticateToken, authorize(['users:read']), (req, res) => {
+router.get('/permissions/all', authenticateToken, (req, res) => {
   res.json(ALL_PERMISSIONS);
 });
 
 // Get active users
-router.get('/active', authenticateToken, authorize(['users:read']), async (req, res) => {
+router.get('/active', authenticateToken, async (req, res) => {
   try {
     const activeSessions = await ActiveSession.find({ isActive: true })
       .populate('userId', 'username alias role')
@@ -138,8 +138,7 @@ router.get('/active', authenticateToken, authorize(['users:read']), async (req, 
       alias: session.userId.alias,
       role: session.userId.role,
       loginTime: session.loginTime,
-      lastActivity: session.lastActivity,
-      ipAddress: session.ipAddress
+      lastActivity: session.lastActivity
     }));
 
     res.json(activeUsers);
@@ -150,7 +149,7 @@ router.get('/active', authenticateToken, authorize(['users:read']), async (req, 
 });
 
 // Update user
-router.put('/:id', authenticateToken, authorize(['users:update']), activityLogger('update', 'user'), async (req, res) => {
+router.put('/:id', authenticateToken, activityLogger('update', 'user'), async (req, res) => {
   try {
     const { password, customPermissions, ...updateData } = req.body;
     
@@ -187,7 +186,7 @@ router.put('/:id', authenticateToken, authorize(['users:update']), activityLogge
 });
 
 // Delete user
-router.delete('/:id', authenticateToken, authorize(['users:delete']), activityLogger('delete', 'user'), async (req, res) => {
+router.delete('/:id', authenticateToken, activityLogger('delete', 'user'), async (req, res) => {
   try {
     const user = await User.findByIdAndDelete(req.params.id);
     if (!user) {

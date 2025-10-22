@@ -14,7 +14,7 @@ const classSchema = Joi.object({
 });
 
 // Get all classes
-router.get('/', authenticateToken, authorize(['classes:read']), async (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
     const classes = await Class.find()
       .populate('classTeacherId')
@@ -41,7 +41,7 @@ router.get('/', authenticateToken, authorize(['classes:read']), async (req, res)
 });
 
 // Get class by ID
-router.get('/:id', authenticateToken, authorize(['classes:read']), async (req, res) => {
+router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const classData = await Class.findById(req.params.id)
       .populate('classTeacherId');
@@ -65,7 +65,7 @@ router.get('/:id', authenticateToken, authorize(['classes:read']), async (req, r
 });
 
 // Create new class
-router.post('/', authenticateToken, authorize(['classes:create']), async (req, res) => {
+router.post('/', authenticateToken, async (req, res) => {
   try {
     const { error } = classSchema.validate(req.body);
     if (error) {
@@ -94,7 +94,7 @@ router.post('/', authenticateToken, authorize(['classes:create']), async (req, r
 });
 
 // Update class
-router.put('/:id', authenticateToken, authorize(['classes:update']), async (req, res) => {
+router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const { error } = classSchema.validate(req.body);
     if (error) {
@@ -129,7 +129,7 @@ router.put('/:id', authenticateToken, authorize(['classes:update']), async (req,
 });
 
 // Delete class
-router.delete('/:id', authenticateToken, authorize(['classes:delete']), async (req, res) => {
+router.delete('/:id', authenticateToken, async (req, res) => {
   try {
     const classId = req.params.id;
     
@@ -156,7 +156,7 @@ router.delete('/:id', authenticateToken, authorize(['classes:delete']), async (r
 });
 
 // Get available teachers for class assignment
-router.get('/available/teachers', authenticateToken, authorize(['classes:read']), async (req, res) => {
+router.get('/available/teachers', authenticateToken, async (req, res) => {
   try {
     const availableTeachers = await Staff.find({
       role: { $in: ['teacher', 'principal'] },
